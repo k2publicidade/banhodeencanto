@@ -173,11 +173,18 @@ let tunel = null;
 let enderecoPublico = null;
 
 if (ONLINE) {
-  tunel = spawn("npx", ["--yes", "cloudflared", "tunnel", "--url", `http://localhost:${PORTA}`], {
-    shell: true,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  // Este PC tem IPv6 instavel (a conexao QUIC por IPv6 cai com "unreachable
+  // network"), entao o tunel e fixado no IPv4 e no transporte http2, que e mais
+  // tolerante. Assim o link nao cai no meio da apresentacao.
+  tunel = spawn(
+    "npx",
+    ["--yes", "cloudflared", "tunnel", "--url", `http://localhost:${PORTA}`, "--edge-ip-version", "4", "--retries", "10"],
+    {
+      shell: true,
+      env: { ...env, TUNNEL_TRANSPORT_PROTOCOL: "http2" },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
 
   const procurarEndereco = (bruto) => {
     const texto = String(bruto);
@@ -191,8 +198,21 @@ if (ONLINE) {
       linha("  Ele existe enquanto esta janela estiver aberta.");
     }
   };
-  tunel.stdout.on("data", procurarEndereco);
-  tunel.stderr.on("data", procurarEndereco);
+  const mostrarProblemas = (bruto) => {
+    for (const l of String(bruto).split(/\r?\n/)) {
+      if (/\b(ERR|WRN|failed|error)\b/i.test(l) && l.trim()) {
+        console.log("  [tunel] " + l.replace(/^\d{4}-\d\d-\d\dT[\d:]+Z\s*/, "").slice(0, 200));
+      }
+    }
+  };
+  tunel.stdout.on("data", (b) => {
+    procurarEndereco(b);
+    mostrarProblemas(b);
+  });
+  tunel.stderr.on("data", (b) => {
+    procurarEndereco(b);
+    mostrarProblemas(b);
+  });
 }
 
 function ipDaRede() {
