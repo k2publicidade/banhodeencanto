@@ -1,0 +1,25 @@
+# Dependencias e build
+node_modules/
+.next/
+out/
+build/
+tsconfig.tsbuildinfo
+*.log
+
+# Banco de dados da loja: NAO versionar (dados reais de clientes, vendas e fiado).
+# Para criar o banco em outra maquina: npm run db:reset -- --confirmar
+data/
+
+# Segredos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Sistema operacional / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

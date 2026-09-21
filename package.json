@@ -1,0 +1,36 @@
+{
+  "name": "banho-de-encanto",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de gestao e PDV - Banho de Encanto Cabelos Sinteticos",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:reset": "node scripts/db-reset.mjs",
+    "db:seed": "node scripts/db-seed.mjs",
+    "db:sequencias": "node scripts/sincronizar-sequencias.mjs",
+    "validar:schema": "node scripts/validar-schema.mjs",
+    "validar:sql": "node scripts/validar-sql.mjs",
+    "test:rotas": "node scripts/teste-rotas.mjs",
+    "test:fluxos": "node scripts/teste-fluxos.mjs",
+    "test:tudo": "node scripts/validar-schema.mjs && node scripts/validar-sql.mjs && node scripts/teste-rotas.mjs"
+  },
+  "dependencies": {
+    "next": "^16.3.4",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/node": "^22.19.19",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
