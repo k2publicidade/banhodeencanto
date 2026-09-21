@@ -12,6 +12,7 @@
     "db:seed": "node scripts/db-seed.mjs",
     "db:sequencias": "node scripts/sincronizar-sequencias.mjs",
     "db:backup": "node scripts/backup-banco.mjs",
+    "apresentar": "node scripts/apresentar.mjs",
     "validar:schema": "node scripts/validar-schema.mjs",
     "validar:sql": "node scripts/validar-sql.mjs",
     "test:rotas": "node scripts/teste-rotas.mjs",

@@ -42,6 +42,16 @@ O servidor roda na maquina da loja; o celular acessa pelo IP dessa maquina na re
 (ex.: `http://192.168.0.10:3000`). No Chrome do Android use "Adicionar a tela inicial"
 e o sistema abre em tela cheia, como um aplicativo - o atalho ja abre o PDV.
 
+## Apresentar ao cliente
+
+```bash
+npm run apresentar
+```
+
+Sobe o sistema em build de producao com um banco de demonstracao separado (resetavel) e
+mostra o endereco para o computador e para o celular. Detalhes em
+[docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Publicar (hospedagem)
 
 O banco e um arquivo SQLite, entao o sistema precisa de um lugar com disco (VPS com

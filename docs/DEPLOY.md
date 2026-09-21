@@ -92,6 +92,32 @@ Cuidado com o tunel: o link fica publico na internet, protegido apenas pela tela
 login. **Troque as senhas de demonstracao antes de expor** (`/configuracoes/usuarios`)
 e nunca deixe o PDV aberto num link publico.
 
+## Apresentar ao cliente (sem servidor)
+
+Para mostrar o sistema sem publicar nada, existe um modo apresentacao que roda em build
+de producao (sem a barra de desenvolvimento do Next), com um banco de demonstracao
+separado dos seus dados:
+
+```bash
+npm run apresentar                 # recria o banco de demonstracao e sobe em http://localhost:3000
+npm run apresentar -- --sem-reset  # continua de onde parou (nao apaga o que foi feito)
+npm run apresentar -- --porta=3200 # outra porta
+```
+
+Ao subir, o terminal mostra o endereco para o computador e o endereco da rede (para o
+celular), o estado inicial do caixa e as dicas do roteiro. Rodar de novo restaura o
+banco limpo, entao a apresentacao nunca comeca com dados estragados.
+
+Se a apresentacao for remota (cliente em outro lugar), publique com um tunel enquanto a
+sessao durar:
+
+```bash
+npx cloudflared tunnel --url http://localhost:3000
+```
+
+Lembre de trocar as senhas de demonstracao antes de expor o link, e encerrar o tunel no
+fim.
+
 ## Resumo
 
 | Onde | Serve para | Banco |
