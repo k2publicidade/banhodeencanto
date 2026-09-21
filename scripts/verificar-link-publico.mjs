@@ -43,7 +43,7 @@ await Promise.all([pg.waitForNavigation({ waitUntil: "networkidle2", timeout: 60
 console.log("  login ->", pg.url());
 await pg.screenshot({ path: join(SAIDA, "01-painel.png") });
 
-for (const [rota, marca] of [["/caixa", "Codigo de barras"], ["/produtos", "produto(s) encontrado(s)"], ["/vendas", "venda(s) no filtro"], ["/relatorios", "Curva ABC"], ["/estoque", "Lancar movimento"]]) {
+for (const [rota, marca] of [["/caixa", "Itens da venda"], ["/produtos", "produto(s) encontrado(s)"], ["/vendas", "venda(s) no filtro"], ["/relatorios", "Curva ABC"], ["/estoque", "Lancar movimento"]]) {
   const rr = await pg.goto(BASE + rota, { waitUntil: "networkidle2", timeout: 60000 });
   const ok = await pg.evaluate((m) => document.body.innerText.includes(m), marca);
   console.log(`  ${rota.padEnd(12)} HTTP ${rr.status()}  conteudo esperado: ${ok ? "sim" : "NAO"}`);

@@ -108,12 +108,15 @@ Ao subir, o terminal mostra o endereco para o computador e o endereco da rede (p
 celular), o estado inicial do caixa e as dicas do roteiro. Rodar de novo restaura o
 banco limpo, entao a apresentacao nunca comeca com dados estragados.
 
-Se a apresentacao for remota (cliente em outro lugar), publique com um tunel enquanto a
-sessao durar:
+Se a apresentacao for remota (cliente em outro lugar), um comando sobe o sistema e publica
+um link na internet, por um tunel do Cloudflare:
 
 ```bash
-npx cloudflared tunnel --url http://localhost:3000
+npm run apresentar -- --online
 ```
+
+O endereco publico aparece na tela poucos segundos depois (`https://algo.trycloudflare.com`).
+Ele existe enquanto essa janela estiver aberta e muda a cada vez que voce roda o comando.
 
 O endereco gerado e aleatorio (por exemplo `https://count-itself-organised-drives.trycloudflare.com`)
 e muda a cada vez que o tunel sobe. Para conferir o que o cliente vai ver, com o tunel no
