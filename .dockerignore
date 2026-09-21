@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.gitignore
+data
+docs
+*.md
+!README.md
+tsconfig.tsbuildinfo
+.vercel
+.env
+.env.*

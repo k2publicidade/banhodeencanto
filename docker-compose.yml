@@ -1,0 +1,40 @@
+# Sobe o sistema com o banco num volume proprio (os dados sobrevivem a atualizacoes).
+#
+#   1. crie um arquivo .env com a chave de sessao:
+#        BDE_SECRET=<cole aqui uma chave longa e aleatoria>
+#      (gerar: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")
+#   2. docker compose up -d --build
+#   3. primeira vez, com o banco vazio, carregue os dados de demonstracao:
+#        docker compose exec sistema npm run db:seed
+#
+# Atualizar depois de mudar o codigo:  docker compose up -d --build
+
+services:
+  sistema:
+    build: .
+    image: banhodeencanto
+    container_name: banhodeencanto
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      BDE_DB_PATH: /dados/banho.db
+      BDE_SECRET: ${BDE_SECRET:?defina BDE_SECRET no arquivo .env}
+      TZ: America/Sao_Paulo
+    volumes:
+      - dados:/dados
+      - backups:/backups
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  dados:
+  backups:

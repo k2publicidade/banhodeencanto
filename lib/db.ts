@@ -8,13 +8,23 @@ import { join, dirname } from "node:path";
  */
 
 const DATA_DIR = join(process.cwd(), "data");
+
+/**
+ * Caminho do banco. Por padrao <projeto>/data/banho.db; em hospedagem com disco
+ * proprio (Docker, VPS) aponte para o volume com BDE_DB_PATH=/dados/banho.db.
+ * Em ambiente serverless (Vercel) o sistema do arquivos e somente leitura, entao
+ * o banco precisa ficar em BDE_DB_PATH apontando para um disco de verdade ou
+ * para um servico de banco - veja docs/DEPLOY.md.
+ */
 export const DB_PATH = process.env.BDE_DB_PATH || join(DATA_DIR, "banho.db");
 
 type GlobalWithDb = typeof globalThis & { __bde_db?: DatabaseSync };
 const g = globalThis as GlobalWithDb;
 
 function createDb(): DatabaseSync {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  // A pasta do banco pode estar fora do projeto (volume do Docker, /dados...)
+  const dirDoBanco = dirname(DB_PATH);
+  if (!existsSync(dirDoBanco)) mkdirSync(dirDoBanco, { recursive: true });
   const db = new DatabaseSync(DB_PATH);
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA journal_mode = WAL;");

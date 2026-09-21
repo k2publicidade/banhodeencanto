@@ -42,6 +42,20 @@ O servidor roda na maquina da loja; o celular acessa pelo IP dessa maquina na re
 (ex.: `http://192.168.0.10:3000`). No Chrome do Android use "Adicionar a tela inicial"
 e o sistema abre em tela cheia, como um aplicativo - o atalho ja abre o PDV.
 
+## Publicar (hospedagem)
+
+O banco e um arquivo SQLite, entao o sistema precisa de um lugar com disco (VPS com
+Docker, ou o proprio PC da loja). **Na Vercel nao funciona**: o ambiente serverless nao
+tem disco gravavel e a primeira consulta ao banco derruba a pagina.
+
+Passo a passo das duas opcoes (com HTTPS e backup) em
+[docs/DEPLOY.md](docs/DEPLOY.md). O caminho do banco e definido por variavel de
+ambiente, o que permite apontar para um volume:
+
+```bash
+BDE_DB_PATH=/dados/banho.db BDE_SECRET=<chave> npm start
+```
+
 ## Banco de dados
 
 O arquivo `data/banho.db` **nao vai para o repositorio** (contem dados de clientes,
