@@ -84,7 +84,7 @@ export default async function PaginaVendas({
         </Grade>
 
         <Secao titulo="Filtros">
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 1fr auto auto", gap: 12, alignItems: "end" }}>
+          <form method="get" className="grade-form" style={{ "--cols-desktop": "1.6fr 1fr 1fr 1fr 1fr 1fr auto auto" } as React.CSSProperties}>
             <Campo rotulo="Buscar" nome="q" valor={sp.q} placeholder="Numero da venda, cliente ou CPF" />
             <Campo rotulo="De" nome="de" valor={sp.de} tipo="date" />
             <Campo rotulo="Ate" nome="ate" valor={sp.ate} tipo="date" />

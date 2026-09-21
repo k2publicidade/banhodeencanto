@@ -139,7 +139,7 @@ export default async function DetalheVenda({
           </Tabela>
         </Secao>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, alignItems: "start" }}>
+        <div className="grade-responsiva">
           <Secao titulo="Pagamentos" padding={false}>
             <Tabela>
               <thead>

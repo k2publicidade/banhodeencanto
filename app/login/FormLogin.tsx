@@ -15,16 +15,28 @@ export default function FormLogin() {
           name="email"
           type="email"
           autoComplete="username"
+          inputMode="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="next"
           placeholder="voce@banhodeencanto.com.br"
           defaultValue=""
           required
-          autoFocus
         />
       </div>
 
       <div>
         <label htmlFor="senha">Senha</label>
-        <input id="senha" name="senha" type="password" autoComplete="current-password" placeholder="••••••••" required />
+        <input
+          id="senha"
+          name="senha"
+          type="password"
+          autoComplete="current-password"
+          enterKeyHint="go"
+          placeholder="••••••••"
+          required
+        />
       </div>
 
       {estado?.erro ? (

@@ -90,7 +90,7 @@ export default async function PaginaFornecedores({
         </Secao>
 
         <Secao titulo="Buscar e listar">
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr auto", gap: 12, alignItems: "end" }}>
+          <form method="get" className="grade-form" style={{ "--cols-desktop": "2fr auto" } as React.CSSProperties}>
             <Campo rotulo="Buscar" nome="q" valor={sp.q} placeholder="Razao social, fantasia, CNPJ ou contato" />
             <button className="btn btn-primario" type="submit">Buscar</button>
           </form>

@@ -113,7 +113,7 @@ export default async function PaginaClientes({
         ) : null}
 
         <Secao titulo="Buscar">
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr auto", gap: 12, alignItems: "end" }}>
+          <form method="get" className="grade-form" style={{ "--cols-desktop": "2fr auto" } as React.CSSProperties}>
             <Campo rotulo="Buscar" nome="q" valor={sp.q} placeholder="Nome, apelido, CPF, telefone ou codigo" />
             <button className="btn btn-primario" type="submit">Buscar</button>
           </form>

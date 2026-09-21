@@ -67,7 +67,7 @@ export default async function PaginaCompras({
         </Grade>
 
         <Secao titulo="Filtros">
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 12, alignItems: "end" }}>
+          <form method="get" className="grade-form" style={{ "--cols-desktop": "1fr 1fr auto auto" } as React.CSSProperties}>
             <div>
               <label htmlFor="status">Status</label>
               <select id="status" name="status" defaultValue={sp.status ?? ""}>

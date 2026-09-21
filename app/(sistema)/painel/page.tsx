@@ -104,7 +104,7 @@ export default async function Painel() {
           />
         </Secao>
 
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.25fr) minmax(0,1fr)", gap: 18, alignItems: "start" }}>
+        <div className="grade-responsiva" style={{ "--cols-desktop": "minmax(0,1.25fr) minmax(0,1fr)" } as React.CSSProperties}>
           {/* Top produtos */}
           <Secao
             titulo="Produtos que mais vendem (30 dias)"

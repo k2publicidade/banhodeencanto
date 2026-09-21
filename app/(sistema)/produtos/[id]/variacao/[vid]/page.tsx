@@ -170,13 +170,13 @@ export default async function PaginaVariacao({
             <CampoArea rotulo="Observacoes" nome="observacoes" valor={v.observacoes} linhas={2} />
           </Secao>
 
-          <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+          <div className="acoes-form" style={{ marginBottom: 20 }}>
             <button className="btn btn-primario btn-lg" type="submit">Salvar SKU</button>
             <Link className="btn btn-neutro btn-lg" href={`/produtos/${produtoId}?aba=variacoes`}>Voltar</Link>
           </div>
         </form>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, alignItems: "start" }}>
+        <div className="grade-responsiva">
           <Secao titulo="Movimentacoes de estoque" descricao="Ultimas 25" padding={false}>
             {movimentos.length === 0 ? (
               <Vazio titulo="Sem movimentacoes" />

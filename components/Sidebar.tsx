@@ -2,78 +2,39 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { MENU, itemAtivo } from "./menu";
 
-type Item = { href: string; rotulo: string; icone: string };
-
-const GRUPOS: { titulo: string; itens: Item[] }[] = [
-  {
-    titulo: "Operacao",
-    itens: [
-      { href: "/caixa", rotulo: "PDV / Caixa", icone: "▣" },
-      { href: "/painel", rotulo: "Painel", icone: "◈" },
-      { href: "/vendas", rotulo: "Vendas", icone: "≡" },
-    ],
-  },
-  {
-    titulo: "Catalogo",
-    itens: [
-      { href: "/produtos", rotulo: "Produtos e SKUs", icone: "❖" },
-      { href: "/estoque", rotulo: "Estoque", icone: "▤" },
-      { href: "/compras", rotulo: "Compras", icone: "▽" },
-      { href: "/fornecedores", rotulo: "Fornecedores", icone: "◇" },
-    ],
-  },
-  {
-    titulo: "Gestao",
-    itens: [
-      { href: "/clientes", rotulo: "Clientes e Fiado", icone: "☺" },
-      { href: "/relatorios", rotulo: "Relatorios", icone: "▨" },
-      { href: "/cadastros", rotulo: "Cadastros auxiliares", icone: "⚙" },
-      { href: "/configuracoes", rotulo: "Configuracoes", icone: "✦" },
-    ],
-  },
-];
-
+/** Barra lateral do desktop (no celular quem manda e o NavegacaoMobile). */
 export default function Sidebar({ nome, apelido, papel }: { nome: string; apelido: string | null; papel: string }) {
   const caminho = usePathname();
 
   return (
-    <aside
-      className="sidebar nao-imprimir"
-      style={{
-        width: 232,
-        minWidth: 232,
-        height: "100vh",
-        position: "sticky",
-        top: 0,
-        display: "flex",
-        flexDirection: "column",
-        overflowY: "auto",
-        padding: "16px 12px",
-      }}
-    >
+    <aside className="sidebar nao-imprimir">
       <Link href="/painel" style={{ display: "block", marginBottom: 6, padding: "0 6px" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/logo-transparente.png"
+          src="/logo-md.webp"
           alt="Banho de Encanto"
+          width={190}
+          height={92}
           style={{ width: "100%", maxWidth: 190, height: "auto" }}
         />
       </Link>
 
       <nav style={{ flex: 1, marginTop: 8 }}>
-        {GRUPOS.map((g) => (
+        {MENU.map((g) => (
           <div key={g.titulo}>
             <div className="titulo-secao">{g.titulo}</div>
-            {g.itens.map((it) => {
-              const ativo = caminho === it.href || caminho.startsWith(it.href + "/");
-              return (
-                <Link key={it.href} href={it.href} className={"sidebar-item" + (ativo ? " ativo" : "")}>
-                  <span style={{ width: 16, textAlign: "center", opacity: 0.9 }}>{it.icone}</span>
-                  <span>{it.rotulo}</span>
-                </Link>
-              );
-            })}
+            {g.itens.map((it) => (
+              <Link
+                key={it.href}
+                href={it.href}
+                className={"sidebar-item" + (itemAtivo(caminho, it.href) ? " ativo" : "")}
+              >
+                <span style={{ width: 16, textAlign: "center", opacity: 0.9 }}>{it.icone}</span>
+                <span>{it.rotulo}</span>
+              </Link>
+            ))}
           </div>
         ))}
       </nav>
@@ -81,15 +42,12 @@ export default function Sidebar({ nome, apelido, papel }: { nome: string; apelid
       <div
         style={{
           borderTop: "1px solid rgba(255,255,255,0.12)",
-          paddingTop: 12,
-          marginTop: 10,
           padding: "12px 8px 2px",
+          marginTop: 10,
         }}
       >
         <div style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{apelido || nome}</div>
-        <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11.5, textTransform: "capitalize" }}>
-          {papel}
-        </div>
+        <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11.5, textTransform: "capitalize" }}>{papel}</div>
         <form action="/api/sair" method="post">
           <button
             type="submit"

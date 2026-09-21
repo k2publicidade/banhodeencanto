@@ -187,7 +187,7 @@ export default async function PaginaRelatorios({
           )}
         </Secao>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, alignItems: "start" }}>
+        <div className="grade-responsiva">
           <Secao titulo="Produtos que mais vendem" descricao="Por receita no periodo" padding={false}>
             {top.length === 0 ? <Vazio titulo="Sem vendas" /> : (
               <Tabela>
@@ -338,7 +338,7 @@ export default async function PaginaRelatorios({
           </Tabela>
         </Secao>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, alignItems: "start" }}>
+        <div className="grade-responsiva">
           <Secao titulo="SKUs sem venda no periodo" descricao="Dinheiro parado na prateleira - avalie promocao ou redistribuicao" padding={false}>
             {semVenda.length === 0 ? <Vazio titulo="Todos os SKUs com estoque venderam" /> : (
               <Tabela maxAltura={400}>
@@ -406,7 +406,7 @@ export default async function PaginaRelatorios({
           )}
         </Secao>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, alignItems: "start" }}>
+        <div className="grade-responsiva">
           <Secao titulo="Melhores clientes" padding={false}>
             {topClientes.length === 0 ? <Vazio titulo="Sem dados" /> : (
               <Tabela>

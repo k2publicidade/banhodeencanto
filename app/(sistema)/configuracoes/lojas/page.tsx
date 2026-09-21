@@ -130,7 +130,7 @@ export default async function PaginaLojas({
 
 function TransferenciaForm({ variacoes, lojas }: { variacoes: { id: number; texto: string }[]; lojas: { id: number; texto: string }[] }) {
   return (
-    <form action={acaoTransferir} style={{ display: "grid", gridTemplateColumns: "2.5fr 1fr 1fr 1fr auto", gap: 12, alignItems: "end" }}>
+    <form action={acaoTransferir} className="grade-form" style={{ "--cols-desktop": "2.5fr 1fr 1fr 1fr auto" } as React.CSSProperties}>
       <div>
         <label htmlFor="variacao_id">SKU</label>
         <select id="variacao_id" name="variacao_id" required defaultValue="">

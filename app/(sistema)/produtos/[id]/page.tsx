@@ -285,7 +285,7 @@ export default async function PaginaProduto({
             >
               <form action={postGerarVariacoes}>
                 <input type="hidden" name="id_produto" value={produtoId} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+                <div className="grade-responsiva" style={{ gap: 18 }}>
                   <div>
                     <label style={{ marginBottom: 8 }}>Cores ({f.cores.length} disponiveis)</label>
                     <div style={{ maxHeight: 210, overflowY: "auto", border: "1px solid #e7e1d6", borderRadius: 9, padding: 9, background: "#fff" }}>

@@ -76,7 +76,7 @@ export default async function NovoProduto({ searchParams }: { searchParams: Prom
             </Linha>
           </Secao>
 
-          <div style={{ display: "flex", gap: 10 }}>
+          <div className="acoes-form">
             <button className="btn btn-primario btn-lg" type="submit">Criar produto e ir para as variacoes</button>
             <Link className="btn btn-neutro btn-lg" href="/produtos">Cancelar</Link>
           </div>

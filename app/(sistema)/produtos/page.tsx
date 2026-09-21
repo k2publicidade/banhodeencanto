@@ -85,7 +85,7 @@ export default async function ListaProdutos({ searchParams }: { searchParams: Bu
 
       <Conteudo>
         <Secao titulo="Filtros">
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr auto", gap: 12, alignItems: "end" }}>
+          <form method="get" className="grade-form" style={{ "--cols-desktop": "2fr 1fr 1fr 1fr 1fr 1fr auto" } as React.CSSProperties}>
             <Campo rotulo="Buscar" nome="q" valor={sp.q} placeholder="Nome, SKU, codigo de barras ou modelo" />
             <CampoSelect
               rotulo="Marca"

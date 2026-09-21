@@ -108,7 +108,7 @@ export default async function NovaCompra({
         </Secao>
 
         <Secao titulo="Buscar SKUs para incluir" descricao="Busque por nome, cor ou SKU e depois selecione os itens na tabela abaixo">
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr auto", gap: 12, alignItems: "end" }}>
+          <form method="get" className="grade-form" style={{ "--cols-desktop": "2fr auto" } as React.CSSProperties}>
             <Campo rotulo="Buscar SKU" nome="q" valor={sp.q} placeholder="Ex: jumbo 1B, crochet, mega hair" />
             <button className="btn btn-primario" type="submit">Buscar</button>
           </form>
@@ -178,7 +178,7 @@ export default async function NovaCompra({
             </Tabela>
           </Secao>
 
-          <div style={{ display: "flex", gap: 10 }}>
+          <div className="acoes-form">
             <button className="btn btn-primario btn-lg" type="submit">Criar compra (rascunho)</button>
             <Link className="btn btn-neutro btn-lg" href="/compras">Cancelar</Link>
           </div>

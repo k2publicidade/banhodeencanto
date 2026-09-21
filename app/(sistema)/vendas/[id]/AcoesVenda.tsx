@@ -212,7 +212,7 @@ export function PainelCancelamento({ vendaId, numero }: { vendaId: number; numer
 
   return (
     <Secao titulo="Cancelar venda" descricao="Devolve todos os itens ao estoque, estorna o caixa e cancela o fiado">
-      <div style={{ display: "grid", gridTemplateColumns: "2fr auto", gap: 12, alignItems: "end" }}>
+      <div className="grade-form" style={{ gap: 12 }}>
         <div>
           <label htmlFor="motivo_cancelamento">Motivo do cancelamento</label>
           <input

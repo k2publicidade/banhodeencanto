@@ -141,7 +141,7 @@ export default async function PaginaEstoque({
         </Secao>
 
         <Secao titulo="Filtros" descricao={`${itens.length} SKU(s) listados • ${num(pecasListadas)} pecas • ${moeda(totalListado)} a custo`}>
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr auto auto", gap: 12, alignItems: "end" }}>
+          <form method="get" className="grade-form" style={{ "--cols-desktop": "2fr 1fr 1fr 1fr 1fr 1fr auto auto" } as React.CSSProperties}>
             <Campo rotulo="Buscar" nome="q" valor={sp.q} placeholder="Produto, SKU, cor ou localizacao" />
             <CampoSelect
               rotulo="Situacao"
