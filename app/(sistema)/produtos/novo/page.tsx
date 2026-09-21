@@ -22,7 +22,7 @@ export default async function NovoProduto({ searchParams }: { searchParams: Prom
       />
 
       <Conteudo largura={1100}>
-        {sp.erro ? <div className="card" style={{ padding: "11px 15px", marginBottom: 14, borderLeft: "4px solid #9c2b2b", color: "#9c2b2b", fontWeight: 600 }}>{sp.erro}</div> : null}
+        {sp.erro ? <div className="aviso aviso-erro">{sp.erro}</div> : null}
 
         <form action={postCriarProduto}>
           <Secao titulo="Identificacao" descricao="O produto-pai agrupa todas as cores e comprimentos. Nao cadastre cada cor como um produto separado.">

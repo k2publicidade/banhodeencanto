@@ -551,11 +551,12 @@ export function GraficoBarras({
           >
             <div
               style={{
-                height: (d.valor / max) * (altura - 22) + "px",
+                height: altura - 22,
                 background: cor,
                 borderRadius: "4px 4px 0 0",
-                minHeight: d.valor > 0 ? 3 : 0,
-                transition: "height .2s",
+                transform: `scaleY(${d.valor > 0 ? Math.max(d.valor / max, 0.012) : 0})`,
+                transformOrigin: "bottom",
+                transition: "transform .2s",
               }}
             />
           </div>

@@ -57,7 +57,7 @@ export default async function NovaCompra({
       />
 
       <Conteudo largura={1250}>
-        {sp.erro ? <div className="card" style={{ padding: "11px 15px", marginBottom: 14, borderLeft: "4px solid #9c2b2b", color: "#9c2b2b", fontWeight: 600 }}>{sp.erro}</div> : null}
+        {sp.erro ? <div className="aviso aviso-erro">{sp.erro}</div> : null}
 
         <Secao
           titulo="Sugestao de compra"

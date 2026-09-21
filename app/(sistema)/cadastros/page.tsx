@@ -41,7 +41,7 @@ export default async function PaginaCadastros({ searchParams }: { searchParams: 
       />
 
       <Conteudo>
-        {sp.msg ? <div className="card" style={{ padding: "11px 15px", marginBottom: 14, borderLeft: "4px solid #1f8a5b", color: "#166b46", fontWeight: 600 }}>{sp.msg}</div> : null}
+        {sp.msg ? <div className="aviso aviso-ok">{sp.msg}</div> : null}
 
         <Grade colunas={4}>
           <Kpi rotulo="Tabelas de apoio" valor={String(CADASTROS.length + 2)} detalhe="Marcas, cores, texturas, tecnicas..." />

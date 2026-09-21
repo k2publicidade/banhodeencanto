@@ -138,7 +138,7 @@ export default async function ListaProdutos({ searchParams }: { searchParams: Bu
         </Secao>
 
         {semVariacao > 0 ? (
-          <div className="card" style={{ padding: "11px 15px", marginBottom: 16, borderLeft: "4px solid #c8913a", fontSize: 13.5 }}>
+          <div className="aviso aviso-info">
             <strong>{semVariacao} produto(s) sem nenhuma variacao cadastrada.</strong>{" "}
             <span style={{ color: "#7d7466" }}>
               Abra o produto, va na aba Variacoes e use o gerador automatico por cor e comprimento.

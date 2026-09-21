@@ -45,16 +45,7 @@ export default async function Painel() {
         {/* Situacao do caixa */}
         {caixa ? (
           <div
-            className="card"
-            style={{
-              padding: "12px 16px",
-              marginBottom: 16,
-              display: "flex",
-              alignItems: "center",
-              gap: 18,
-              borderLeft: "4px solid #1f8a5b",
-              flexWrap: "wrap",
-            }}
+            className="aviso aviso-ok"
           >
             <span className="tag tag-verde">CAIXA ABERTO</span>
             <span style={{ fontSize: 13.5 }}>
@@ -71,8 +62,7 @@ export default async function Painel() {
           </div>
         ) : (
           <div
-            className="card"
-            style={{ padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 14, borderLeft: "4px solid #9c2b2b" }}
+            className="aviso aviso-erro"
           >
             <span className="tag tag-vermelho">CAIXA FECHADO</span>
             <span style={{ fontSize: 13.5, color: "#7d7466" }}>Nenhum caixa aberto no momento.</span>

@@ -144,15 +144,15 @@ export default async function PaginaProduto({
       />
 
       <Conteudo>
-        {sp.msg ? <div className="card" style={{ padding: "11px 15px", marginBottom: 14, borderLeft: "4px solid #1f8a5b", color: "#166b46", fontWeight: 600 }}>{sp.msg}</div> : null}
-        {sp.erro ? <div className="card" style={{ padding: "11px 15px", marginBottom: 14, borderLeft: "4px solid #9c2b2b", color: "#9c2b2b", fontWeight: 600 }}>{sp.erro}</div> : null}
+        {sp.msg ? <div className="aviso aviso-ok">{sp.msg}</div> : null}
+        {sp.erro ? <div className="aviso aviso-erro">{sp.erro}</div> : null}
         {p.status !== "ativo" ? (
-          <div className="card" style={{ padding: "11px 15px", marginBottom: 14, borderLeft: "4px solid #c8913a" }}>
+          <div className="aviso aviso-info">
             Este produto esta <strong>{p.status}</strong> e nao aparece para venda no PDV.
           </div>
         ) : null}
         {variacoes.length === 0 ? (
-          <div className="card" style={{ padding: "11px 15px", marginBottom: 14, borderLeft: "4px solid #c8913a" }}>
+          <div className="aviso aviso-info">
             <strong>Este produto ainda nao tem variacoes/SKUs.</strong>{" "}
             <span style={{ color: "#7d7466" }}>
               Sem variacao nao existe estoque, custo nem preco. Va na aba{" "}
