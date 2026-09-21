@@ -115,8 +115,26 @@ sessao durar:
 npx cloudflared tunnel --url http://localhost:3000
 ```
 
-Lembre de trocar as senhas de demonstracao antes de expor o link, e encerrar o tunel no
-fim.
+O endereco gerado e aleatorio (por exemplo `https://count-itself-organised-drives.trycloudflare.com`)
+e muda a cada vez que o tunel sobe. Para conferir o que o cliente vai ver, com o tunel no
+ar:
+
+```bash
+npm run verificar:link --  # precisa de BASE no ambiente
+BASE=https://xxxx.trycloudflare.com npm run verificar:link
+```
+
+O script entra pela tela de login do endereco publico, percorre caixa, produtos, vendas,
+relatorios e estoque, faz uma venda pelo PDV e salva prints em
+`%LOCALAPPDATA%\Temp\bde-ui\link-publico`.
+
+Cuidados ao expor o link publico:
+
+- o tunel gratuito nao tem garantia de disponibilidade: e para apresentar, nao para operar;
+- o endereco e aleatorio, mas nao e secreto: quem tiver o link chega na tela de login, e a
+  tela mostra os acessos de demonstracao. Por isso o modo apresentacao usa o banco
+  `data/apresentacao.db`, descartavel - seus dados reais em `data/banho.db` nao entram;
+- encerre o tunel (Ctrl+C) no fim da apresentacao.
 
 ## Resumo
 

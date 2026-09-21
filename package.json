@@ -13,6 +13,7 @@
     "db:sequencias": "node scripts/sincronizar-sequencias.mjs",
     "db:backup": "node scripts/backup-banco.mjs",
     "apresentar": "node scripts/apresentar.mjs",
+    "verificar:link": "node scripts/verificar-link-publico.mjs",
     "validar:schema": "node scripts/validar-schema.mjs",
     "validar:sql": "node scripts/validar-sql.mjs",
     "test:rotas": "node scripts/teste-rotas.mjs",
