@@ -1056,6 +1056,17 @@ table {
     font-size: 14px;
   }
 
+  .app {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .app-corpo {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+
   .so-no-mobile {
     display: none !important;
   }
@@ -1214,6 +1225,19 @@ table {
 @media (min-width: 900px) {
   .sidebar {
     display: flex;
+    flex: 0 0 232px;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1499px) {
+  .grade-form.filtros-vendas {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1099px) {
+  .grade-form.filtros-vendas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
