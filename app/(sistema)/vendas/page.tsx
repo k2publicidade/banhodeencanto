@@ -17,46 +17,46 @@ export default async function PaginaVendas({
   const where: string[] = ["1=1"];
   const params: any[] = [];
   if (sp.q) {
-    where.push(`(v.numero LIKE ? COLLATE NOCASE OR COALESCE(c.nome,'') LIKE ? COLLATE NOCASE OR COALESCE(c.cpf_cnpj,'') LIKE ?)`);
+    where.push(`(v.numero ILIKE ? OR COALESCE(c.nome,'') ILIKE ? OR COALESCE(c.cpf_cnpj,'') ILIKE ?)`);
     const l = "%" + sp.q + "%";
     params.push(l, l, l);
   }
   if (sp.status) { where.push("v.status = ?"); params.push(sp.status); }
-  if (sp.de) { where.push("date(v.data) >= ?"); params.push(sp.de); }
-  if (sp.ate) { where.push("date(v.data) <= ?"); params.push(sp.ate); }
+  if (sp.de) { where.push("CAST(v.data AS DATE) >= ?"); params.push(sp.de); }
+  if (sp.ate) { where.push("CAST(v.data AS DATE) <= ?"); params.push(sp.ate); }
   if (sp.operador) { where.push("v.usuario_id = ?"); params.push(Number(sp.operador)); }
   if (sp.forma) {
     where.push("EXISTS (SELECT 1 FROM vendas_pagamentos vp WHERE vp.venda_id = v.id AND vp.forma_pagamento_id = ?)");
     params.push(Number(sp.forma));
   }
 
-  const vendas = all<any>(
-    `SELECT v.id, v.numero, v.data, v.subtotal, v.desconto_valor, v.total, v.custo_total, v.status,
-            COALESCE(c.nome,'Balcao') cliente, u.nome operador, uv.nome vendedor,
-            (SELECT COUNT(*) FROM vendas_itens vi WHERE vi.venda_id = v.id) itens,
-            (SELECT COALESCE(SUM(vi.quantidade),0) FROM vendas_itens vi WHERE vi.venda_id = v.id) pecas,
-            (SELECT GROUP_CONCAT(fp.nome, ' + ') FROM vendas_pagamentos vp JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id WHERE vp.venda_id = v.id) formas
-     FROM vendas v
-     LEFT JOIN clientes c ON c.id = v.cliente_id
-     LEFT JOIN usuarios u ON u.id = v.usuario_id
-     LEFT JOIN usuarios uv ON uv.id = v.vendedor_id
-     WHERE ${where.join(" AND ")}
-     ORDER BY v.id DESC LIMIT 400`,
-    ...params
-  );
-
-  const tot = one<any>(
-    `SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN v.status <> 'cancelada' THEN v.total ELSE 0 END),0) total,
-            COALESCE(SUM(CASE WHEN v.status <> 'cancelada' THEN v.total - v.custo_total ELSE 0 END),0) lucro,
-            SUM(CASE WHEN v.status='cancelada' THEN 1 ELSE 0 END) canceladas
-     FROM vendas v
-     LEFT JOIN clientes c ON c.id = v.cliente_id
-     WHERE ${where.join(" AND ")}`,
-    ...params
-  );
-
-  const usuarios = all<{ id: number; nome: string }>("SELECT id, nome FROM usuarios WHERE ativo=1 ORDER BY nome");
-  const formas = all<{ id: number; nome: string }>("SELECT id, nome FROM formas_pagamento ORDER BY ordem");
+  const [vendas, tot, usuarios, formas] = await Promise.all([
+    all<any>(
+      `SELECT v.id, v.numero, v.data, v.subtotal, v.desconto_valor, v.total, v.custo_total, v.status,
+              COALESCE(c.nome,'Balcao') cliente, u.nome operador, uv.nome vendedor,
+              (SELECT COUNT(*) FROM vendas_itens vi WHERE vi.venda_id = v.id) itens,
+              (SELECT COALESCE(SUM(vi.quantidade),0) FROM vendas_itens vi WHERE vi.venda_id = v.id) pecas,
+              (SELECT STRING_AGG(fp.nome, ' + ') FROM vendas_pagamentos vp JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id WHERE vp.venda_id = v.id) formas
+       FROM vendas v
+       LEFT JOIN clientes c ON c.id = v.cliente_id
+       LEFT JOIN usuarios u ON u.id = v.usuario_id
+       LEFT JOIN usuarios uv ON uv.id = v.vendedor_id
+       WHERE ${where.join(" AND ")}
+       ORDER BY v.id DESC LIMIT 400`,
+      ...params
+    ),
+    one<any>(
+      `SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN v.status <> 'cancelada' THEN v.total ELSE 0 END),0) total,
+              COALESCE(SUM(CASE WHEN v.status <> 'cancelada' THEN v.total - v.custo_total ELSE 0 END),0) lucro,
+              SUM(CASE WHEN v.status='cancelada' THEN 1 ELSE 0 END) canceladas
+       FROM vendas v
+       LEFT JOIN clientes c ON c.id = v.cliente_id
+       WHERE ${where.join(" AND ")}`,
+      ...params
+    ),
+    all<{ id: number; nome: string }>("SELECT id, nome FROM usuarios WHERE ativo=1 ORDER BY nome"),
+    all<{ id: number; nome: string }>("SELECT id, nome FROM formas_pagamento ORDER BY ordem"),
+  ]);
   const ticket = (tot?.n ?? 0) > 0 ? Number(tot.total) / Number(tot.n) : 0;
 
   return (

@@ -18,14 +18,16 @@ export default async function PaginaEstoque({
 }) {
   await exigir();
   const sp = await searchParams;
-  const f = listaFiltros();
-  const r = resumoEstoque();
+  const [f, r] = await Promise.all([
+    listaFiltros(),
+    resumoEstoque(),
+  ]);
 
   const where: string[] = ["variacao_status = 'ativo'"];
   const params: any[] = [];
   if (sp.q) {
-    where.push(`(sku LIKE ? COLLATE NOCASE OR produto LIKE ? COLLATE NOCASE OR cor_codigo LIKE ?
-                 OR localizacao LIKE ? COLLATE NOCASE OR marca LIKE ? COLLATE NOCASE)`);
+    where.push(`(sku ILIKE ? OR produto ILIKE ? OR cor_codigo ILIKE ?
+                 OR localizacao ILIKE ? OR marca ILIKE ?)`);
     const l = "%" + sp.q + "%";
     params.push(l, l, l, l, l);
   }
@@ -40,32 +42,32 @@ export default async function PaginaEstoque({
     : sp.ordem === "local" ? "localizacao, corredor, prateleira, posicao"
     : "CASE situacao_estoque WHEN 'sem_estoque' THEN 0 WHEN 'critico' THEN 1 WHEN 'repor' THEN 2 WHEN 'ok' THEN 3 ELSE 4 END, disponivel";
 
-  const itens = all<any>(
-    `SELECT variacao_id, sku, ean, produto, produto_id, marca, linha, categoria, cor, cor_codigo, cor_hex, comprimento, comprimento_unidade,
-            custo_medio, preco_venda, margem_percentual, estoque, reservado, disponivel, estoque_min, estoque_max,
-            ponto_reposicao, localizacao, corredor, prateleira, posicao, unidade_estoque, estoque_custo, estoque_venda, situacao_estoque
-     FROM vw_estoque_posicao
-     WHERE ${where.join(" AND ")}
-     ORDER BY ${ordem}
-     LIMIT 500`,
-    ...params
-  );
-
-  const movimentos = all<any>(
-    `SELECT m.id, m.tipo, m.quantidade, m.saldo_apos, m.motivo, m.documento, m.criado_em, m.referencia_tipo,
-            v.sku, v.id variacao_id, p.nome produto, u.nome usuario
-     FROM estoque_movimentos m
-     JOIN variacoes v ON v.id = m.variacao_id
-     JOIN produtos p ON p.id = v.produto_id
-     LEFT JOIN usuarios u ON u.id = m.usuario_id
-     ORDER BY m.id DESC LIMIT 40`
-  );
-
-  const lojas = all<{ id: number; nome: string }>("SELECT id, nome FROM lojas WHERE ativa = 1 ORDER BY padrao DESC, nome");
+  const [itens, movimentos, lojas] = await Promise.all([
+    all<any>(
+      `SELECT variacao_id, sku, ean, produto, produto_id, marca, linha, categoria, cor, cor_codigo, cor_hex, comprimento, comprimento_unidade,
+              custo_medio, preco_venda, margem_percentual, estoque, reservado, disponivel, estoque_min, estoque_max,
+              ponto_reposicao, localizacao, corredor, prateleira, posicao, unidade_estoque, estoque_custo, estoque_venda, situacao_estoque
+       FROM vw_estoque_posicao
+       WHERE ${where.join(" AND ")}
+       ORDER BY ${ordem}
+       LIMIT 500`,
+      ...params
+    ),
+    all<any>(
+      `SELECT m.id, m.tipo, m.quantidade, m.saldo_apos, m.motivo, m.documento, m.criado_em, m.referencia_tipo,
+              v.sku, v.id variacao_id, p.nome produto, u.nome usuario
+       FROM estoque_movimentos m
+       JOIN variacoes v ON v.id = m.variacao_id
+       JOIN produtos p ON p.id = v.produto_id
+       LEFT JOIN usuarios u ON u.id = m.usuario_id
+       ORDER BY m.id DESC LIMIT 40`
+    ),
+    all<{ id: number; nome: string }>("SELECT id, nome FROM lojas WHERE ativa = 1 ORDER BY padrao DESC, nome"),
+  ]);
   const totalListado = itens.reduce((s, i) => s + i.estoque_custo, 0);
   const pecasListadas = itens.reduce((s, i) => s + i.estoque, 0);
 
-  const opcoesSku = all<any>(
+  const opcoesSku = await all<any>(
     `SELECT variacao_id, sku, produto, cor_codigo, comprimento, comprimento_unidade, disponivel
      FROM vw_estoque_posicao WHERE variacao_status='ativo'
      ORDER BY produto, cor_codigo, comprimento`

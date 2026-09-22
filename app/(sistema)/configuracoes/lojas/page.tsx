@@ -16,7 +16,7 @@ export default async function PaginaLojas({
   await exigirGestao();
   const sp = await searchParams;
 
-  const lojas = all<any>(
+  const lojas = await all<any>(
     `SELECT l.*,
             (SELECT COUNT(DISTINCT variacao_id) FROM estoque e WHERE e.loja_id = l.id AND e.quantidade > 0) skus,
             (SELECT COALESCE(SUM(e.quantidade),0) FROM estoque e WHERE e.loja_id = l.id) pecas,
@@ -113,10 +113,10 @@ export default async function PaginaLojas({
 
         <Secao titulo="Transferencia entre unidades" descricao="Mova estoque de uma unidade para outra mantendo o historico">
           <TransferenciaForm
-            variacoes={all<any>(
+            variacoes={(await all<any>(
               `SELECT variacao_id, sku, produto, cor_codigo, comprimento, comprimento_unidade
                FROM vw_estoque_posicao WHERE variacao_status='ativo' ORDER BY produto, cor_codigo LIMIT 400`
-            ).map((v) => ({
+            )).map((v) => ({
               id: v.variacao_id,
               texto: `${v.produto} | ${v.cor_codigo ?? "-"} ${v.comprimento ? v.comprimento + (v.comprimento_unidade ?? "") : ""} | ${v.sku}`,
             }))}

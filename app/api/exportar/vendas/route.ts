@@ -7,11 +7,11 @@ export async function GET() {
   const u = await sessao();
   if (!u) return new Response("nao autorizado", { status: 401 });
 
-  const linhas = all<any>(
+  const linhas = await all<any>(
     `SELECT v.numero, v.data, COALESCE(c.nome,'Balcao') cliente, u.nome operador, uv.nome vendedor,
             v.subtotal, v.desconto_valor, v.acrescimo, v.total, v.custo_total,
             ROUND(v.total - v.custo_total, 2) lucro, v.status, v.motivo_cancelamento,
-            (SELECT GROUP_CONCAT(fp.nome, ' + ') FROM vendas_pagamentos vp JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id WHERE vp.venda_id = v.id) formas,
+            (SELECT STRING_AGG(fp.nome, ' + ') FROM vendas_pagamentos vp JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id WHERE vp.venda_id = v.id) formas,
             (SELECT COALESCE(SUM(vi.quantidade),0) FROM vendas_itens vi WHERE vi.venda_id = v.id) pecas
      FROM vendas v
      LEFT JOIN clientes c ON c.id = v.cliente_id

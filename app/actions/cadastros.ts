@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { all, one, run, tx, auditar, salvarConfig } from "@/lib/db";
+import { one, run, tx, auditar, salvarConfig } from "@/lib/db";
 import { arred, parseMoeda, moeda } from "@/lib/format";
 import { exigir, exigirGestao, hashSenha } from "@/lib/auth";
 
@@ -60,9 +60,9 @@ export async function salvarAuxiliar(form: FormData) {
   try {
     if (id) {
       const sets = Object.keys(vals).map((k) => `${k} = ?`).join(", ");
-      run(`UPDATE ${tabela} SET ${sets} WHERE ${tabela === "unidades_medida" ? "sigla" : "id"} = ?`, ...Object.values(vals), id);
+      await run(`UPDATE ${tabela} SET ${sets} WHERE ${tabela === "unidades_medida" ? "sigla" : "id"} = ?`, ...Object.values(vals), id);
     } else {
-      run(`INSERT INTO ${tabela}(${Object.keys(vals).join(",")}) VALUES (${Object.keys(vals).map(() => "?").join(",")})`, ...Object.values(vals));
+      await run(`INSERT INTO ${tabela}(${Object.keys(vals).join(",")}) VALUES (${Object.keys(vals).map(() => "?").join(",")})`, ...Object.values(vals));
     }
   } catch (e: any) {
     const msg = String(e?.message || "");
@@ -77,9 +77,12 @@ export async function salvarAuxiliar(form: FormData) {
 export async function alternarAtivo(tabela: string, id: number, ativo: number) {
   await exigir();
   const col = tabela === "unidades_medida" ? "sigla" : "id";
-  const temColuna = all<{ n: number }>(`SELECT COUNT(*) n FROM pragma_table_info(?) WHERE name='ativo'`, tabela)[0]?.n ?? 0;
+  const temColuna = (await one<{ existe: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'banho_encanto' AND table_name = ? AND column_name = 'ativo') AS existe",
+    tabela
+  ))?.existe ?? false;
   if (!temColuna) return { ok: false, erro: "Este cadastro nao pode ser desativado." };
-  run(`UPDATE ${tabela} SET ativo = ? WHERE ${col} = ?`, ativo ? 0 : 1, id);
+  await run(`UPDATE ${tabela} SET ativo = ? WHERE ${col} = ?`, ativo ? 0 : 1, id);
   revalidatePath("/cadastros");
   revalidatePath(`/cadastros/${tabela}`);
   return { ok: true };
@@ -89,7 +92,7 @@ export async function excluirAuxiliar(tabela: string, id: number) {
   await exigir();
   const col = tabela === "unidades_medida" ? "sigla" : "id";
   try {
-    run(`DELETE FROM ${tabela} WHERE ${col} = ?`, id);
+    await run(`DELETE FROM ${tabela} WHERE ${col} = ?`, id);
   } catch (e: any) {
     return { ok: false, erro: "Nao foi possivel excluir: este registro esta sendo usado em produtos. Desative-o em vez de excluir." };
   }
@@ -126,10 +129,10 @@ export async function salvarCliente(form: FormData) {
   try {
     if (id) {
       const sets = Object.keys(vals).map((k) => `${k} = ?`).join(", ");
-      run(`UPDATE clientes SET ${sets} WHERE id = ?`, ...Object.values(vals), id);
+      await run(`UPDATE clientes SET ${sets} WHERE id = ?`, ...Object.values(vals), id);
     } else {
-      const prox = (one<{ n: number }>("SELECT COUNT(*) n FROM clientes")?.n ?? 0) + 1;
-      run(
+      const prox = Number((await one<{ n: number }>("SELECT COUNT(*) n FROM clientes"))?.n ?? 0) + 1;
+      await run(
         `INSERT INTO clientes(codigo, ${Object.keys(vals).join(",")}) VALUES (?, ${Object.keys(vals).map(() => "?").join(",")})`,
         "CLI-" + String(prox).padStart(4, "0"), ...Object.values(vals)
       );
@@ -144,26 +147,25 @@ export async function salvarCliente(form: FormData) {
 export async function lancarFiado(clienteId: number, tipo: "pagamento" | "ajuste", valor: number, observacoes: string) {
   const u = await exigir();
   if (valor <= 0) return { ok: false, erro: "Informe um valor maior que zero." };
-  const cli = one<any>("SELECT id, nome FROM clientes WHERE id = ?", clienteId);
+  const cli = await one<any>("SELECT id, nome FROM clientes WHERE id = ?", clienteId);
   if (!cli) return { ok: false, erro: "Cliente nao encontrado." };
 
-  const saldoAnt = one<{ s: number }>(
-    "SELECT COALESCE(SUM(CASE WHEN tipo='compra' THEN valor ELSE -valor END),0) s FROM fiado_lancamentos WHERE cliente_id = ?",
-    clienteId
-  )?.s ?? 0;
-
-  const delta = tipo === "pagamento" ? -valor : valor;
-  const novo = arred(saldoAnt + delta);
-  if (novo < -0.01) return { ok: false, erro: `O cliente deve apenas ${moeda(saldoAnt)}.` };
-
   try {
-    tx(() => {
-      run(
+    await tx(async () => {
+      const saldoAnt = Number((await one<{ s: number }>(
+        "SELECT COALESCE(SUM(CASE WHEN tipo='compra' THEN valor ELSE -valor END),0) s FROM fiado_lancamentos WHERE cliente_id = ?",
+        clienteId
+      ))?.s ?? 0);
+      const delta = tipo === "pagamento" ? -valor : valor;
+      const novo = arred(saldoAnt + delta);
+      if (novo < -0.01) throw new Error(`O cliente deve apenas ${moeda(saldoAnt)}.`);
+
+      await run(
         `INSERT INTO fiado_lancamentos(cliente_id, tipo, valor, saldo_apos, observacoes, usuario_id)
          VALUES (?,?,?,?,?,?)`,
         clienteId, tipo, valor, novo, observacoes || null, u.id
       );
-      auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "fiado_" + tipo, entidade: "clientes", entidade_id: clienteId, detalhe: `R$ ${valor} -> saldo ${novo}` });
+      await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "fiado_" + tipo, entidade: "clientes", entidade_id: clienteId, detalhe: `R$ ${valor} -> saldo ${novo}` });
     });
   } catch (e: any) {
     return { ok: false, erro: e?.message || "Falha no lancamento." };
@@ -187,23 +189,23 @@ export async function salvarUsuario(form: FormData) {
 
   try {
     if (id) {
-      run(
+      await run(
         `UPDATE usuarios SET nome=?, apelido=?, email=?, papel=?, comissao_pct=?, pin=?, telefone=?, ativo=? WHERE id=?`,
         nome, texto(form.get("apelido")), texto(form.get("email")), papel, num(form.get("comissao_pct")),
-        pin ?? one<{ pin: string }>("SELECT pin FROM usuarios WHERE id = ?", id)?.pin ?? null,
-        flag(form.get("ativo")), id
+        pin ?? (await one<{ pin: string }>("SELECT pin FROM usuarios WHERE id = ?", id))?.pin ?? null,
+        texto(form.get("telefone")), flag(form.get("ativo")), id
       );
-      if (senha) run("UPDATE usuarios SET senha_hash = ? WHERE id = ?", hashSenha(senha), id);
+      if (senha) await run("UPDATE usuarios SET senha_hash = ? WHERE id = ?", hashSenha(senha), id);
     } else {
       if (!senha) return { ok: false, erro: "Defina uma senha para o novo usuario." };
-      run(
+      await run(
         `INSERT INTO usuarios(nome, apelido, email, senha_hash, pin, papel, comissao_pct, telefone, ativo)
          VALUES (?,?,?,?,?,?,?,?,1)`,
         nome, texto(form.get("apelido")), texto(form.get("email")), hashSenha(senha), pin, papel,
         num(form.get("comissao_pct")), texto(form.get("telefone"))
       );
     }
-    auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: id ? "alterar" : "criar", entidade: "usuarios", entidade_id: id || null, detalhe: nome });
+    await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: id ? "alterar" : "criar", entidade: "usuarios", entidade_id: id || null, detalhe: nome });
   } catch (e: any) {
     const msg = String(e?.message || "");
     if (msg.includes("UNIQUE")) return { ok: false, erro: "Ja existe um usuario com esse e-mail." };
@@ -225,12 +227,12 @@ export async function salvarConfiguracoes(form: FormData) {
   ];
   for (const k of chaves) {
     const v = form.get(k);
-    if (v !== null) salvarConfig(k, String(v));
+    if (v !== null) await salvarConfig(k, String(v));
   }
   for (const k of ["cupom_imprimir_automatico", "cupom_mostrar_cnpj", "pdv_leitor_codigo_barras"]) {
-    salvarConfig(k, form.get(k) === null ? "0" : "1");
+    await salvarConfig(k, form.get(k) === null ? "0" : "1");
   }
-  auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "alterar", entidade: "configuracoes", detalhe: "Configuracoes da loja" });
+  await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "alterar", entidade: "configuracoes", detalhe: "Configuracoes da loja" });
   revalidatePath("/configuracoes");
   return { ok: true };
 }
@@ -258,11 +260,11 @@ export async function salvarLoja(form: FormData) {
   try {
     if (id) {
       const sets = Object.keys(vals).map((k) => `${k} = ?`).join(", ");
-      run(`UPDATE lojas SET ${sets} WHERE id = ?`, ...Object.values(vals), id);
+      await run(`UPDATE lojas SET ${sets} WHERE id = ?`, ...Object.values(vals), id);
     } else {
-      run(`INSERT INTO lojas(${Object.keys(vals).join(",")}) VALUES (${Object.keys(vals).map(() => "?").join(",")})`, ...Object.values(vals));
+      await run(`INSERT INTO lojas(${Object.keys(vals).join(",")}) VALUES (${Object.keys(vals).map(() => "?").join(",")})`, ...Object.values(vals));
     }
-    auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: id ? "alterar" : "criar", entidade: "lojas", entidade_id: id || null, detalhe: nome });
+    await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: id ? "alterar" : "criar", entidade: "lojas", entidade_id: id || null, detalhe: nome });
   } catch (e: any) {
     return { ok: false, erro: e?.message || "Falha ao salvar a loja." };
   }

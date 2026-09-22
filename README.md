@@ -5,8 +5,8 @@ produtos com variacoes (cor, comprimento, textura), estoque, compras, clientes c
 fiado (caderneta), PDV de balcao, caixa, devolucoes, cancelamentos, relatorios e
 etiquetas com codigo de barras.
 
-Feito em **Next.js 16** (App Router) com **SQLite nativo do Node** (`node:sqlite`) -
-nao precisa de servidor de banco: os dados ficam no arquivo `data/banho.db`.
+Feito em **Next.js 16** (App Router) com **PostgreSQL (Supabase)**. A conexao do
+servidor usa `DATABASE_URL`; o antigo SQLite fica apenas como origem da migracao.
 
 A interface e **mobile first**: o layout base e o do celular, com cara de aplicativo
 (barras fixas, gaveta de menu, folhas inferiores) e todas as funcoes disponiveis no
@@ -15,7 +15,9 @@ completas. Tambem pode ser instalado na tela inicial do celular (PWA).
 
 ## Requisitos
 
-- Node.js 22.13 ou superior (o projeto usa o modulo `node:sqlite`)
+- Node.js 24 (mesma versao usada no projeto Vercel)
+- Banco PostgreSQL com `lib/schema-postgres.sql` aplicado
+- `DATABASE_URL` e `BDE_SECRET` no ambiente do servidor
 
 ## Como rodar
 
@@ -24,69 +26,38 @@ npm install
 npm run dev
 ```
 
-Na primeira execucao o banco e criado automaticamente (a partir de `lib/schema.sql`).
-Acesse http://localhost:3000
+Para usar o banco local existente, execute `npm run db:migrar -- --confirmar`
+uma vez com `DATABASE_URL` configurada. Acesse http://localhost:3000.
 
-### Acessos de demonstracao
+### Acesso inicial
 
-| Perfil | Login | Senha |
-|---|---|---|
-| Administrador | admin@banhodeencanto.com.br | encanto123 |
-| Operador de caixa | caixa@banhodeencanto.com.br | encanto123 |
-
-PIN do operador de caixa: **1234**
+A migracao troca automaticamente todas as senhas de demonstracao. O acesso do
+administrador fica em `data/acesso-inicial.txt` (arquivo local ignorado pelo Git).
 
 ### Usando no celular
 
-O servidor roda na maquina da loja; o celular acessa pelo IP dessa maquina na rede
-(ex.: `http://192.168.0.10:3000`). No Chrome do Android use "Adicionar a tela inicial"
-e o sistema abre em tela cheia, como um aplicativo - o atalho ja abre o PDV.
-
-## Apresentar ao cliente
-
-```bash
-npm run apresentar
-```
-
-Sobe o sistema em build de producao com um banco de demonstracao separado (resetavel) e
-mostra o endereco para o computador e para o celular. Detalhes em
-[docs/DEPLOY.md](docs/DEPLOY.md).
+Abra a URL HTTPS publicada na Vercel. No Chrome do Android, use "Adicionar a
+tela inicial" para abrir o sistema como aplicativo.
 
 ## Publicar (hospedagem)
 
-O banco e um arquivo SQLite, entao o sistema precisa de um lugar com disco (VPS com
-Docker, ou o proprio PC da loja). **Na Vercel nao funciona**: o ambiente serverless nao
-tem disco gravavel e a primeira consulta ao banco derruba a pagina.
-
-Passo a passo das duas opcoes (com HTTPS e backup) em
-[docs/DEPLOY.md](docs/DEPLOY.md). O caminho do banco e definido por variavel de
-ambiente, o que permite apontar para um volume:
-
-```bash
-BDE_DB_PATH=/dados/banho.db BDE_SECRET=<chave> npm start
-```
+O projeto funciona na Vercel com PostgreSQL externo. A receita de configuracao,
+migracao dos dados e deploy esta em [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Banco de dados
 
 O arquivo `data/banho.db` **nao vai para o repositorio** (contem dados de clientes,
-vendas e fiado da loja). Para criar um banco novo:
+vendas e fiado da loja). Para transferir os dados uma vez ao Supabase:
 
 ```bash
-npm run db:reset -- --confirmar   # apaga o banco atual e recria vazio
-npm run db:seed                   # carga de demonstracao (90 dias de movimento)
-npm run db:sequencias             # alinha a numeracao de venda/compra com o banco
+npm run db:migrar -- --confirmar
 ```
 
 ## Verificacao (rodar antes de publicar mudancas)
 
 ```bash
-npm run validar:schema   # o schema aplica e e idempotente
-npm run validar:sql      # confere as consultas SQL escritas no codigo
-npm run test:rotas       # checagens HTTP em todas as telas, permissoes e exportacoes
-npm run test:fluxos      # regras de negocio de ponta a ponta no PDV
-npm run test:mobile      # fluxos principais num Chrome com tela de celular
-npm run auditar:ui       # varre todas as telas procurando quebra de layout no celular
-npm run test:tudo        # validar:schema + validar:sql + test:rotas
+npm run test:postgres    # schema + integracao PostgreSQL + fluxos principais do PDV
+npm run build            # verificacao de tipos e build de producao
 ```
 
 Os testes de interface precisam do Chrome instalado. Instale as ferramentas sob

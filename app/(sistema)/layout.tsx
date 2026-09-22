@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function LayoutSistema({ children }: { children: React.ReactNode }) {
   const usuario = await exigir();
 
-  const caixa = one<{ id: number; abertura_em: string; terminal: string | null }>(
+  const caixa = await one<{ id: number; abertura_em: string; terminal: string | null }>(
     "SELECT id, abertura_em, terminal FROM caixas WHERE status = 'aberto' ORDER BY id DESC LIMIT 1"
   );
 

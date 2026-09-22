@@ -14,10 +14,10 @@ export default async function PaginaClientes({
 }) {
   await exigir();
   const sp = await searchParams;
-  const editando = sp.editar ? one<any>("SELECT * FROM clientes WHERE id = ?", Number(sp.editar)) : null;
+  const editando = sp.editar ? await one<any>("SELECT * FROM clientes WHERE id = ?", Number(sp.editar)) : null;
   const like = "%" + (sp.q ?? "") + "%";
 
-  const clientes = all<any>(
+  const clientes = await all<any>(
     `SELECT c.*,
             COALESCE((SELECT SUM(CASE WHEN f.tipo='compra' THEN f.valor ELSE -f.valor END)
                       FROM fiado_lancamentos f WHERE f.cliente_id = c.id), 0) saldo_fiado,
@@ -25,8 +25,8 @@ export default async function PaginaClientes({
             (SELECT COALESCE(SUM(v.total),0) FROM vendas v WHERE v.cliente_id = c.id AND v.status='concluida') total_gasto,
             (SELECT MAX(v.data) FROM vendas v WHERE v.cliente_id = c.id) ultima_compra
      FROM clientes c
-     WHERE c.nome LIKE ? COLLATE NOCASE OR COALESCE(c.apelido,'') LIKE ? COLLATE NOCASE
-        OR COALESCE(c.cpf_cnpj,'') LIKE ? OR COALESCE(c.telefone,'') LIKE ? OR COALESCE(c.codigo,'') LIKE ?
+     WHERE c.nome ILIKE ? OR COALESCE(c.apelido,'') ILIKE ?
+        OR COALESCE(c.cpf_cnpj,'') ILIKE ? OR COALESCE(c.telefone,'') ILIKE ? OR COALESCE(c.codigo,'') ILIKE ?
      ORDER BY c.nome`,
     like, like, like, like, like
   );

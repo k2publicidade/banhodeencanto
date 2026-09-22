@@ -12,14 +12,14 @@ type Busca = Promise<{ q?: string; marca?: string; categoria?: string; status?: 
 export default async function ListaProdutos({ searchParams }: { searchParams: Busca }) {
   await exigir();
   const sp = await searchParams;
-  const f = listaFiltros();
+  const f = await listaFiltros();
 
   const where: string[] = ["1=1"];
   const params: any[] = [];
 
   if (sp.q) {
-    where.push(`(p.nome LIKE ? COLLATE NOCASE OR p.sku LIKE ? COLLATE NOCASE OR p.modelo_estilo LIKE ? COLLATE NOCASE
-                 OR EXISTS (SELECT 1 FROM variacoes vx WHERE vx.produto_id = p.id AND (vx.sku LIKE ? COLLATE NOCASE OR vx.ean LIKE ? COLLATE NOCASE)))`);
+    where.push(`(p.nome ILIKE ? OR p.sku ILIKE ? OR p.modelo_estilo ILIKE ?
+                 OR EXISTS (SELECT 1 FROM variacoes vx WHERE vx.produto_id = p.id AND (vx.sku ILIKE ? OR vx.ean ILIKE ?)))`);
     const l = "%" + sp.q + "%";
     params.push(l, l, l, l, l);
   }
@@ -34,40 +34,41 @@ export default async function ListaProdutos({ searchParams }: { searchParams: Bu
     : sp.ordem === "margem" ? "margem_media DESC"
     : "vendas_receita DESC";
 
-  const produtos = all<any>(
-    `SELECT p.id, p.nome, p.sku, p.status, p.modelo_estilo, p.foto_principal, p.destaque, p.exibir_site,
-            m.nome marca, lc.nome linha, cat.nome categoria, tp.nome tipo_produto, tx.nome textura,
-            COUNT(DISTINCT v.id) qtd_skus,
-            COALESCE(SUM(e.quantidade), 0) estoque_total,
-            COALESCE(SUM(e.quantidade * v.custo_medio), 0) estoque_custo,
-            COALESCE(SUM(e.quantidade * v.preco_venda), 0) estoque_venda,
-            MIN(v.preco_venda) preco_min,
-            MAX(v.preco_venda) preco_max,
-            AVG(v.margem_percentual) margem_media,
-            SUM(CASE WHEN COALESCE(e.quantidade,0) <= 0 THEN 1 ELSE 0 END) skus_zerados,
-            COALESCE((SELECT SUM(vi.total) FROM vendas_itens vi JOIN vendas vd ON vd.id = vi.venda_id
-                      JOIN variacoes v2 ON v2.id = vi.variacao_id
-                      WHERE v2.produto_id = p.id AND vd.status='concluida'
-                        AND date(vd.data) >= date('now','localtime','-90 days')), 0) vendas_receita
-     FROM produtos p
-     LEFT JOIN marcas m ON m.id = p.marca_id
-     LEFT JOIN linhas_colecao lc ON lc.id = p.linha_id
-     LEFT JOIN categorias cat ON cat.id = p.categoria_id
-     LEFT JOIN tipos_produto tp ON tp.id = p.tipo_produto_id
-     LEFT JOIN texturas tx ON tx.id = p.textura_id
-     LEFT JOIN variacoes v ON v.produto_id = p.id
-     LEFT JOIN estoque e ON e.variacao_id = v.id
-     WHERE ${where.join(" AND ")}
-     GROUP BY p.id
-     ORDER BY ${ordem} LIMIT 300`,
-    ...params
-  );
+  const [produtos, totais] = await Promise.all([
+    all<any>(
+      `SELECT p.id, p.nome, p.sku, p.status, p.modelo_estilo, p.foto_principal, p.destaque, p.exibir_site,
+              m.nome marca, lc.nome linha, cat.nome categoria, tp.nome tipo_produto, tx.nome textura,
+              COUNT(DISTINCT v.id) qtd_skus,
+              COALESCE(SUM(e.quantidade), 0) estoque_total,
+              COALESCE(SUM(e.quantidade * v.custo_medio), 0) estoque_custo,
+              COALESCE(SUM(e.quantidade * v.preco_venda), 0) estoque_venda,
+              MIN(v.preco_venda) preco_min,
+              MAX(v.preco_venda) preco_max,
+              AVG(v.margem_percentual) margem_media,
+              SUM(CASE WHEN COALESCE(e.quantidade,0) <= 0 THEN 1 ELSE 0 END) skus_zerados,
+              COALESCE((SELECT SUM(vi.total) FROM vendas_itens vi JOIN vendas vd ON vd.id = vi.venda_id
+                        JOIN variacoes v2 ON v2.id = vi.variacao_id
+                        WHERE v2.produto_id = p.id AND vd.status='concluida'
+                          AND CAST(vd.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '90 days')::date), 0) vendas_receita
+       FROM produtos p
+       LEFT JOIN marcas m ON m.id = p.marca_id
+       LEFT JOIN linhas_colecao lc ON lc.id = p.linha_id
+       LEFT JOIN categorias cat ON cat.id = p.categoria_id
+       LEFT JOIN tipos_produto tp ON tp.id = p.tipo_produto_id
+       LEFT JOIN texturas tx ON tx.id = p.textura_id
+       LEFT JOIN variacoes v ON v.produto_id = p.id
+       LEFT JOIN estoque e ON e.variacao_id = v.id
+       WHERE ${where.join(" AND ")}
+       GROUP BY p.id, m.nome, lc.nome, cat.nome, tp.nome, tx.nome
+       ORDER BY ${ordem} LIMIT 300`,
+      ...params
+    ),
+    one<any>(
+      `SELECT COUNT(*) n FROM produtos`
+    ),
+  ]);
 
-  const totais = one<any>(
-    `SELECT COUNT(*) n FROM produtos`
-  );
-
-  const totalSkuGeral = one<{ n: number }>("SELECT COUNT(*) n FROM variacoes")?.n ?? 0;
+  const totalSkuGeral = (await one<{ n: number }>("SELECT COUNT(*) n FROM variacoes"))?.n ?? 0;
   const semVariacao = produtos.filter((p) => p.qtd_skus === 0).length;
 
   return (

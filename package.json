@@ -6,6 +6,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "db:gerar-schema": "node scripts/gerar-schema-postgres.mjs",
+    "db:migrar": "node scripts/migrar-sqlite-postgres.mjs",
+    "test:postgres": "node scripts/teste-postgres.mjs",
+    "test:migracao": "node scripts/teste-migracao-postgres.mjs",
+    "test:http-postgres": "node scripts/teste-http-postgres.mjs",
     "start": "next start",
     "lint": "next lint",
     "db:reset": "node scripts/db-reset.mjs",
@@ -22,22 +27,27 @@
     "auditar:ui": "node scripts/auditar-ui.mjs",
     "auditar:ui:desktop": "node scripts/auditar-ui.mjs --desktop",
     "assets": "node scripts/gerar-assets.mjs",
-    "test:tudo": "node scripts/validar-schema.mjs && node scripts/validar-sql.mjs && node scripts/teste-rotas.mjs"
+    "test:tudo": "npm run test:postgres && npm run test:migracao && npm run build && npm run test:http-postgres"
   },
   "dependencies": {
+    "@vercel/functions": "^3.9.8",
     "next": "^16.3.4",
+    "pg": "^8.23.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/node": "^22.19.19",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "pglite-server": "^0.1.5",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": "24.x"
   }
 }

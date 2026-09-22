@@ -6,7 +6,7 @@ import {
   salvarProduto, salvarVariacao, gerarVariacoes, ajustarPrecosProduto,
   aplicarEstoquePadrao, vincularFornecedor, removerVinculoFornecedor, excluirVariacao,
 } from "./produtos";
-import { run } from "@/lib/db";
+import { run, tx } from "@/lib/db";
 import { exigir } from "@/lib/auth";
 
 /* ------------------------------------------------------------------ */
@@ -127,8 +127,10 @@ export async function postExcluirProduto(form: FormData) {
   const id = inteiro(form.get("id_produto"));
   if (u.papel !== "admin") redirect(`/produtos/${id}?erro=${encodeURIComponent("Somente o administrador pode excluir produtos.")}`);
   try {
-    run("DELETE FROM variacoes WHERE produto_id = ?", id);
-    run("DELETE FROM produtos WHERE id = ?", id);
+    await tx(async () => {
+      await run("DELETE FROM variacoes WHERE produto_id = ?", id);
+      await run("DELETE FROM produtos WHERE id = ?", id);
+    });
   } catch {
     redirect(`/produtos/${id}?erro=${encodeURIComponent("Nao foi possivel excluir: existem registros ligados a este produto.")}`);
   }

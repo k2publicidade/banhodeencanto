@@ -14,27 +14,28 @@ export default async function PaginaFornecedores({
 }) {
   await exigir();
   const sp = await searchParams;
-  const editando = sp.editar ? one<any>("SELECT * FROM fornecedores WHERE id = ?", Number(sp.editar)) : null;
+  const editando = sp.editar ? await one<any>("SELECT * FROM fornecedores WHERE id = ?", Number(sp.editar)) : null;
 
   const like = "%" + (sp.q ?? "") + "%";
-  const fornecedores = all<any>(
-    `SELECT f.*,
-            (SELECT COUNT(DISTINCT pf.produto_id) FROM produto_fornecedor pf WHERE pf.fornecedor_id = f.id) produtos,
-            (SELECT COUNT(*) FROM compras c WHERE c.fornecedor_id = f.id AND c.status='confirmado') compras,
-            (SELECT COALESCE(SUM(c.total),0) FROM compras c WHERE c.fornecedor_id = f.id AND c.status='confirmado') total_comprado,
-            (SELECT MAX(c.data) FROM compras c WHERE c.fornecedor_id = f.id AND c.status='confirmado') ultima_compra
-     FROM fornecedores f
-     WHERE f.razao_social LIKE ? COLLATE NOCASE OR COALESCE(f.nome_fantasia,'') LIKE ? COLLATE NOCASE
-        OR COALESCE(f.cnpj,'') LIKE ? OR COALESCE(f.contato,'') LIKE ? COLLATE NOCASE
-     ORDER BY f.razao_social`,
-    like, like, like, like
-  );
-
-  const tot = one<any>(
-    `SELECT COUNT(*) n, (SELECT COUNT(*) FROM produto_fornecedor) vinculos,
-            (SELECT COALESCE(SUM(total),0) FROM compras WHERE status='confirmado') comprado,
-            (SELECT COUNT(*) FROM compras WHERE status='confirmado') ncompras FROM fornecedores`
-  );
+  const [fornecedores, tot] = await Promise.all([
+    all<any>(
+      `SELECT f.*,
+              (SELECT COUNT(DISTINCT pf.produto_id) FROM produto_fornecedor pf WHERE pf.fornecedor_id = f.id) produtos,
+              (SELECT COUNT(*) FROM compras c WHERE c.fornecedor_id = f.id AND c.status='confirmado') compras,
+              (SELECT COALESCE(SUM(c.total),0) FROM compras c WHERE c.fornecedor_id = f.id AND c.status='confirmado') total_comprado,
+              (SELECT MAX(c.data) FROM compras c WHERE c.fornecedor_id = f.id AND c.status='confirmado') ultima_compra
+       FROM fornecedores f
+       WHERE f.razao_social ILIKE ? OR COALESCE(f.nome_fantasia,'') ILIKE ?
+          OR COALESCE(f.cnpj,'') ILIKE ? OR COALESCE(f.contato,'') ILIKE ?
+       ORDER BY f.razao_social`,
+      like, like, like, like
+    ),
+    one<any>(
+      `SELECT COUNT(*) n, (SELECT COUNT(*) FROM produto_fornecedor) vinculos,
+              (SELECT COALESCE(SUM(total),0) FROM compras WHERE status='confirmado') comprado,
+              (SELECT COUNT(*) FROM compras WHERE status='confirmado') ncompras FROM fornecedores`
+    ),
+  ]);
 
   return (
     <>

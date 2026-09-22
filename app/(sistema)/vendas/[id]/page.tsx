@@ -20,7 +20,7 @@ export default async function DetalheVenda({
   const sp = await searchParams;
   const vendaId = Number(id);
 
-  const v = one<any>(
+  const v = await one<any>(
     `SELECT v.*, lo.nome loja, lo.razao_social, lo.cnpj, uo.nome operador, uv.nome vendedor,
             c.nome cliente, c.telefone cliente_telefone, c.id cliente_id, cx.terminal
      FROM vendas v
@@ -34,28 +34,28 @@ export default async function DetalheVenda({
   );
   if (!v) notFound();
 
-  const itens = all<any>(
-    `SELECT vi.*, vv.sku, vv.cor_codigo, vv.cor_hex, vv.comprimento, vv.comprimento_unidade,
-            (vi.quantidade - vi.devolvido) disponivel_devolver
-     FROM vendas_itens vi LEFT JOIN vw_variacoes vv ON vv.variacao_id = vi.variacao_id
-     WHERE vi.venda_id = ? ORDER BY vi.id`,
-    vendaId
-  );
-
-  const pagamentos = all<any>(
-    `SELECT vp.*, fp.nome forma, fp.tipo FROM vendas_pagamentos vp
-     JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id WHERE vp.venda_id = ?`,
-    vendaId
-  );
-
-  const devolucoes = all<any>(
-    `SELECT d.numero, d.data, d.total, d.motivo, u.nome usuario,
-            (SELECT GROUP_CONCAT(vv.sku, ', ') FROM devolucoes_itens di
-             JOIN variacoes vv ON vv.id = di.variacao_id WHERE di.devolucao_id = d.id) skus
-     FROM devolucoes d LEFT JOIN usuarios u ON u.id = d.usuario_id
-     WHERE d.venda_id = ? ORDER BY d.id DESC`,
-    vendaId
-  );
+  const [itens, pagamentos, devolucoes] = await Promise.all([
+    all<any>(
+      `SELECT vi.*, vv.sku, vv.cor_codigo, vv.cor_hex, vv.comprimento, vv.comprimento_unidade,
+              (vi.quantidade - vi.devolvido) disponivel_devolver
+       FROM vendas_itens vi LEFT JOIN vw_variacoes vv ON vv.variacao_id = vi.variacao_id
+       WHERE vi.venda_id = ? ORDER BY vi.id`,
+      vendaId
+    ),
+    all<any>(
+      `SELECT vp.*, fp.nome forma, fp.tipo FROM vendas_pagamentos vp
+       JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id WHERE vp.venda_id = ?`,
+      vendaId
+    ),
+    all<any>(
+      `SELECT d.numero, d.data, d.total, d.motivo, u.nome usuario,
+              (SELECT STRING_AGG(vv.sku, ', ') FROM devolucoes_itens di
+               JOIN variacoes vv ON vv.id = di.variacao_id WHERE di.devolucao_id = d.id) skus
+       FROM devolucoes d LEFT JOIN usuarios u ON u.id = d.usuario_id
+       WHERE d.venda_id = ? ORDER BY d.id DESC`,
+      vendaId
+    ),
+  ]);
 
   const lucro = Number(v.total) - Number(v.custo_total);
   const margem = Number(v.total) > 0 ? (lucro / Number(v.total)) * 100 : 0;

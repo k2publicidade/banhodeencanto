@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.git/
+.vercel/
+data/
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm

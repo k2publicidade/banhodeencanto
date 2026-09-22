@@ -22,29 +22,31 @@ export default async function PaginaVariacao({
   const produtoId = Number(id);
   const variacaoId = Number(vid);
 
-  const v = one<any>(`SELECT * FROM vw_estoque_posicao WHERE variacao_id = ?`, variacaoId);
+  const v = await one<any>(`SELECT * FROM vw_estoque_posicao WHERE variacao_id = ?`, variacaoId);
   if (!v || v.produto_id !== produtoId) notFound();
 
-  const f = listaFiltros();
-  const fornecedores = fornecedoresComparativo(variacaoId);
-  const movimentos = all<any>(
-    `SELECT m.tipo, m.quantidade, m.saldo_anterior, m.saldo_apos, m.motivo, m.documento, m.criado_em, u.nome usuario
-     FROM estoque_movimentos m LEFT JOIN usuarios u ON u.id = m.usuario_id
-     WHERE m.variacao_id = ? ORDER BY m.id DESC LIMIT 25`,
-    variacaoId
-  );
-  const vendas = one<any>(
-    `SELECT COUNT(*) n, COALESCE(SUM(vi.quantidade),0) pecas, COALESCE(SUM(vi.total),0) receita,
-            MIN(v.data) primeira, MAX(v.data) ultima
-     FROM vendas_itens vi JOIN vendas v ON v.id = vi.venda_id
-     WHERE vi.variacao_id = ? AND v.status <> 'cancelada'`,
-    variacaoId
-  );
-  const precos = all<any>(
-    `SELECT preco_anterior, preco_novo, usuario_nome, criado_em FROM precos_historico
-     WHERE variacao_id = ? ORDER BY id DESC LIMIT 10`,
-    variacaoId
-  );
+  const [f, fornecedores, movimentos, vendas, precos] = await Promise.all([
+    listaFiltros(),
+    fornecedoresComparativo(variacaoId),
+    all<any>(
+      `SELECT m.tipo, m.quantidade, m.saldo_anterior, m.saldo_apos, m.motivo, m.documento, m.criado_em, u.nome usuario
+       FROM estoque_movimentos m LEFT JOIN usuarios u ON u.id = m.usuario_id
+       WHERE m.variacao_id = ? ORDER BY m.id DESC LIMIT 25`,
+      variacaoId
+    ),
+    one<any>(
+      `SELECT COUNT(*) n, COALESCE(SUM(vi.quantidade),0) pecas, COALESCE(SUM(vi.total),0) receita,
+              MIN(v.data) primeira, MAX(v.data) ultima
+       FROM vendas_itens vi JOIN vendas v ON v.id = vi.venda_id
+       WHERE vi.variacao_id = ? AND v.status <> 'cancelada'`,
+      variacaoId
+    ),
+    all<any>(
+      `SELECT preco_anterior, preco_novo, usuario_nome, criado_em FROM precos_historico
+       WHERE variacao_id = ? ORDER BY id DESC LIMIT 10`,
+      variacaoId
+    ),
+  ]);
 
   const semFiscal = !v.ncm;
 

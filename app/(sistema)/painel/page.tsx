@@ -12,16 +12,18 @@ export const dynamic = "force-dynamic";
 export default async function Painel() {
   const u = await exigir();
 
-  const hoje = resumoHoje();
-  const mes = resumoPeriodo(30);
-  const est = resumoEstoque();
-  const serie = vendasPorDia(30);
-  const top = topProdutos(30, 8);
-  const alertas = alertasEstoque(8);
-  const ultimas = ultimasVendas(8);
-  const fiado = fiadoAberto();
-  const cores = corQueMaisGira(90, 6);
-  const caixa = caixaAbertoResumo();
+  const [hoje, mes, est, serie, top, alertas, ultimas, fiado, cores, caixa] = await Promise.all([
+    resumoHoje(),
+    resumoPeriodo(30),
+    resumoEstoque(),
+    vendasPorDia(30),
+    topProdutos(30, 8),
+    alertasEstoque(8),
+    ultimasVendas(8),
+    fiadoAberto(),
+    corQueMaisGira(90, 6),
+    caixaAbertoResumo(),
+  ]);
 
   const ticket = mes.vendas > 0 ? mes.receita / mes.vendas : 0;
   const margemMes = mes.receita > 0 ? (mes.lucro / mes.receita) * 100 : 0;

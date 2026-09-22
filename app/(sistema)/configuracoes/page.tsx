@@ -12,16 +12,18 @@ export default async function PaginaConfiguracoes({ searchParams }: { searchPara
   const sp = await searchParams;
 
   const cfg: Record<string, string> = {};
-  for (const c of all<{ chave: string; valor: string }>("SELECT chave, valor FROM configuracoes")) cfg[c.chave] = c.valor ?? "";
+  for (const c of await all<{ chave: string; valor: string }>("SELECT chave, valor FROM configuracoes")) cfg[c.chave] = c.valor ?? "";
 
-  const lojas = all<any>("SELECT * FROM lojas ORDER BY padrao DESC, nome");
-  const usuarios = all<any>("SELECT id, nome, apelido, email, papel, ativo, comissao_pct FROM usuarios ORDER BY nome");
-  const produtos = one<{ n: number }>("SELECT COUNT(*) n FROM produtos")?.n ?? 0;
-  const skus = one<{ n: number }>("SELECT COUNT(*) n FROM variacoes")?.n ?? 0;
-  const vendas = one<any>("SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM vendas")?.n ?? 0;
-  const vendasTotal = one<any>("SELECT COALESCE(SUM(total),0) t FROM vendas WHERE status='concluida'")?.t ?? 0;
-  const movimentos = one<{ n: number }>("SELECT COUNT(*) n FROM estoque_movimentos")?.n ?? 0;
-  const audit = all<any>(
+  const [lojas, usuarios] = await Promise.all([
+    all<any>("SELECT * FROM lojas ORDER BY padrao DESC, nome"),
+    all<any>("SELECT id, nome, apelido, email, papel, ativo, comissao_pct FROM usuarios ORDER BY nome"),
+  ]);
+  const produtos = (await one<{ n: number }>("SELECT COUNT(*) n FROM produtos"))?.n ?? 0;
+  const skus = (await one<{ n: number }>("SELECT COUNT(*) n FROM variacoes"))?.n ?? 0;
+  const vendas = (await one<any>("SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM vendas"))?.n ?? 0;
+  const vendasTotal = (await one<any>("SELECT COALESCE(SUM(total),0) t FROM vendas WHERE status='concluida'"))?.t ?? 0;
+  const movimentos = (await one<{ n: number }>("SELECT COUNT(*) n FROM estoque_movimentos"))?.n ?? 0;
+  const audit = await all<any>(
     `SELECT a.acao, a.entidade, a.detalhe, a.criado_em, COALESCE(a.usuario_nome,'sistema') usuario
      FROM auditoria a ORDER BY a.id DESC LIMIT 20`
   );

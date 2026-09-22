@@ -43,7 +43,13 @@ export function verificarSenha(senha: string, hash: string | null): boolean {
 /* ------------------------------------------------------------------ */
 
 function segredo(): string {
-  if (process.env.BDE_SECRET) return process.env.BDE_SECRET;
+  if (process.env.BDE_SECRET) {
+    if (process.env.BDE_SECRET.length < 32) throw new Error("BDE_SECRET precisa ter pelo menos 32 caracteres.");
+    return process.env.BDE_SECRET;
+  }
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+    throw new Error("Configure BDE_SECRET com uma chave aleatoria de pelo menos 32 caracteres.");
+  }
   const dir = join(process.cwd(), "data");
   const arq = join(dir, ".secret");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -62,7 +68,7 @@ function assinar(payload: string): string {
 /* ------------------------------------------------------------------ */
 
 export async function entrar(email: string, senha: string): Promise<{ ok: boolean; erro?: string }> {
-  const u = one<any>(
+  const u = await one<any>(
     `SELECT id, nome, apelido, email, senha_hash, papel, loja_id, comissao_pct, ativo
      FROM usuarios WHERE lower(email) = lower(?)`,
     email.trim()
@@ -79,13 +85,14 @@ export async function entrar(email: string, senha: string): Promise<{ ok: boolea
   const jar = await cookies();
   jar.set(COOKIE, token, {
     httpOnly: true,
+    secure: !!process.env.VERCEL,
     sameSite: "lax",
     path: "/",
     maxAge: DURACAO_H * 3600,
   });
 
-  run("UPDATE usuarios SET ultimo_acesso = datetime('now','localtime') WHERE id = ?", u.id);
-  auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "login", entidade: "usuarios", entidade_id: u.id });
+  await run("UPDATE usuarios SET ultimo_acesso = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD HH24:MI:SS') WHERE id = ?", u.id);
+  await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "login", entidade: "usuarios", entidade_id: u.id });
   return { ok: true };
 }
 
@@ -100,7 +107,9 @@ export async function sessao(): Promise<UsuarioSessao | null> {
   const token = jar.get(COOKIE)?.value;
   if (!token || !token.includes(".")) return null;
   const [corpo, assinatura] = token.split(".");
-  if (assinar(corpo) !== assinatura) return null;
+  const expected = Buffer.from(assinar(corpo));
+  const received = Buffer.from(assinatura ?? "");
+  if (expected.length !== received.length || !timingSafeEqual(expected, received)) return null;
   let dados: { uid: number; exp: number };
   try {
     dados = JSON.parse(Buffer.from(corpo, "base64url").toString("utf8"));
@@ -108,7 +117,7 @@ export async function sessao(): Promise<UsuarioSessao | null> {
     return null;
   }
   if (!dados.exp || dados.exp < Date.now()) return null;
-  const u = one<UsuarioSessao>(
+  const u = await one<UsuarioSessao>(
     `SELECT id, nome, apelido, email, papel, loja_id, comissao_pct FROM usuarios WHERE id = ? AND ativo = 1`,
     dados.uid
   );

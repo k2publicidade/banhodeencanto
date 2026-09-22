@@ -25,12 +25,13 @@ export default async function PaginaCadastros({ searchParams }: { searchParams: 
   await exigir();
   const sp = await searchParams;
 
-  const contagens: Record<string, number> = {};
-  for (const c of CADASTROS) {
-    contagens[c.tabela] = all<{ n: number }>(`SELECT COUNT(*) n FROM ${c.tabela}`)[0]?.n ?? 0;
-  }
-  const fornecedores = all<{ n: number }>("SELECT COUNT(*) n FROM fornecedores")[0]?.n ?? 0;
-  const clientes = all<{ n: number }>("SELECT COUNT(*) n FROM clientes")[0]?.n ?? 0;
+  const tabelas = [...CADASTROS.map((c) => c.tabela), "fornecedores", "clientes"];
+  const totais = await all<{ tabela: string; n: number }>(
+    tabelas.map((tabela) => `SELECT '${tabela}' AS tabela, COUNT(*) n FROM ${tabela}`).join(" UNION ALL ")
+  );
+  const contagens: Record<string, number> = Object.fromEntries(totais.map((r) => [r.tabela, r.n]));
+  const fornecedores = contagens.fornecedores ?? 0;
+  const clientes = contagens.clientes ?? 0;
 
   return (
     <>

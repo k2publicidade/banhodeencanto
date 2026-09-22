@@ -10,7 +10,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!u) return NextResponse.json({ erro: "nao autorizado" }, { status: 401 });
 
   const { id } = await ctx.params;
-  const v = one<any>(
+  const v = await one<any>(
     `SELECT v.id, v.numero, v.data, v.subtotal, v.desconto_valor, v.desconto_pct, v.acrescimo, v.total,
             v.custo_total, v.status, v.observacoes,
             lo.nome AS loja, lo.razao_social, lo.cnpj, lo.endereco, lo.cidade, lo.uf, lo.telefone,
@@ -24,18 +24,24 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   );
   if (!v) return NextResponse.json({ erro: "venda nao encontrada" }, { status: 404 });
 
-  const itens = all<any>(
-    `SELECT vi.descricao, vi.quantidade, vi.preco_unitario, vi.desconto_valor, vi.total, vi.devolvido,
-            vv.sku, vv.cor_codigo
-     FROM vendas_itens vi LEFT JOIN vw_variacoes vv ON vv.variacao_id = vi.variacao_id
-     WHERE vi.venda_id = ?`, Number(id)
-  );
-
-  const pagamentos = all<any>(
-    `SELECT fp.nome AS forma, fp.tipo, vp.valor, vp.parcelas, vp.valor_recebido, vp.troco
-     FROM vendas_pagamentos vp JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id
-     WHERE vp.venda_id = ?`, Number(id)
-  );
+  const [itens, pagamentos, empresa, slogan, mensagem, larguraCupom, mostrarCnpj] = await Promise.all([
+    all<any>(
+      `SELECT vi.descricao, vi.quantidade, vi.preco_unitario, vi.desconto_valor, vi.total, vi.devolvido,
+              vv.sku, vv.cor_codigo
+       FROM vendas_itens vi LEFT JOIN vw_variacoes vv ON vv.variacao_id = vi.variacao_id
+       WHERE vi.venda_id = ?`, Number(id)
+    ),
+    all<any>(
+      `SELECT fp.nome AS forma, fp.tipo, vp.valor, vp.parcelas, vp.valor_recebido, vp.troco
+       FROM vendas_pagamentos vp JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id
+       WHERE vp.venda_id = ?`, Number(id)
+    ),
+    config("empresa_nome", "Banho de Encanto"),
+    config("empresa_slogan", "Cabelos Sinteticos"),
+    config("cupom_mensagem", "Obrigado pela preferencia!"),
+    config("cupom_impressora", "80mm"),
+    config("cupom_mostrar_cnpj", "1"),
+  ]);
 
   const troco = pagamentos.reduce((s, p) => s + Number(p.troco || 0), 0);
   const pecas = itens.reduce((s, i) => s + Number(i.quantidade), 0);
@@ -44,11 +50,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     id: v.id,
     numero: v.numero,
     data: new Date(String(v.data).replace(" ", "T")).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
-    empresa: config("empresa_nome", "Banho de Encanto"),
-    slogan: config("empresa_slogan", "Cabelos Sinteticos"),
-    mensagem: config("cupom_mensagem", "Obrigado pela preferencia!"),
-    larguraCupom: config("cupom_impressora", "80mm"),
-    mostrarCnpj: config("cupom_mostrar_cnpj", "1") === "1",
+    empresa,
+    slogan,
+    mensagem,
+    larguraCupom,
+    mostrarCnpj: mostrarCnpj === "1",
     cnpj: v.cnpj,
     endereco: [v.endereco, v.cidade, v.uf].filter(Boolean).join(" - "),
     telefone: v.telefone,

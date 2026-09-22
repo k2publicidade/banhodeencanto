@@ -37,18 +37,19 @@ export default async function PaginaEtiquetas({
   const produtoId = Number(id);
   const porEtiqueta = Math.max(1, Math.min(60, Number(sp.qtd) || 6));
 
-  const p = one<any>("SELECT id, nome, nome_reduzido, sku FROM produtos WHERE id = ?", produtoId);
+  const p = await one<any>("SELECT id, nome, nome_reduzido, sku FROM produtos WHERE id = ?", produtoId);
   if (!p) notFound();
 
-  const variacoes = all<any>(
-    `SELECT variacao_id, sku, ean, cor_codigo, cor, cor_hex, comprimento, comprimento_unidade, preco_venda, preco_promocional, unidade_estoque, disponivel
-     FROM vw_estoque_posicao WHERE produto_id = ? AND variacao_status = 'ativo'
-     ORDER BY cor_codigo, comprimento`,
-    produtoId
-  );
-
-  const nomeLoja = config("empresa_nome", "Banho de Encanto");
-  const slogan = config("empresa_slogan", "Cabelos Sinteticos");
+  const [variacoes, nomeLoja, slogan] = await Promise.all([
+    all<any>(
+      `SELECT variacao_id, sku, ean, cor_codigo, cor, cor_hex, comprimento, comprimento_unidade, preco_venda, preco_promocional, unidade_estoque, disponivel
+       FROM vw_estoque_posicao WHERE produto_id = ? AND variacao_status = 'ativo'
+       ORDER BY cor_codigo, comprimento`,
+      produtoId
+    ),
+    config("empresa_nome", "Banho de Encanto"),
+    config("empresa_slogan", "Cabelos Sinteticos"),
+  ]);
 
   const etiquetas = variacoes.flatMap((v) => Array.from({ length: porEtiqueta }, () => v));
 

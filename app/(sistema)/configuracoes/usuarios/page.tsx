@@ -14,9 +14,9 @@ export default async function PaginaUsuarios({
 }) {
   const eu = await exigirGestao();
   const sp = await searchParams;
-  const editando = sp.editar ? one<any>("SELECT * FROM usuarios WHERE id = ?", Number(sp.editar)) : null;
+  const editando = sp.editar ? await one<any>("SELECT * FROM usuarios WHERE id = ?", Number(sp.editar)) : null;
 
-  const usuarios = all<any>(
+  const usuarios = await all<any>(
     `SELECT u.*, l.nome loja,
             (SELECT COUNT(*) FROM vendas v WHERE v.usuario_id = u.id) vendas,
             (SELECT COALESCE(SUM(v.total),0) FROM vendas v WHERE v.vendedor_id = u.id AND v.status='concluida') faturamento

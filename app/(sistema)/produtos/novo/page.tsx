@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 export default async function NovoProduto({ searchParams }: { searchParams: Promise<{ erro?: string }> }) {
   await exigir();
   const sp = await searchParams;
-  const f = listaFiltros();
-  const nSku = (one<{ n: number }>("SELECT COUNT(*) n FROM produtos")?.n ?? 0) + 1;
+  const f = await listaFiltros();
+  const nSku = ((await one<{ n: number }>("SELECT COUNT(*) n FROM produtos"))?.n ?? 0) + 1;
 
   return (
     <>

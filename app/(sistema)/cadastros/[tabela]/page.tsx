@@ -137,34 +137,39 @@ export default async function PaginaCadastroTabela({
   if (!def) notFound();
 
   const pk = tabela === "unidades_medida" ? "sigla" : "id";
-  const editando = sp.editar ? one<any>(`SELECT * FROM ${tabela} WHERE ${pk} = ?`, isNaN(Number(sp.editar)) ? sp.editar : Number(sp.editar)) : null;
+  const editando = sp.editar ? await one<any>(`SELECT * FROM ${tabela} WHERE ${pk} = ?`, isNaN(Number(sp.editar)) ? sp.editar : Number(sp.editar)) : null;
 
-  const temAtivo = (all<{ n: number }>("SELECT COUNT(*) n FROM pragma_table_info(?) WHERE name='ativo'", tabela)[0]?.n ?? 0) > 0;
+  const temAtivo = ((await all<{ n: number }>("SELECT COUNT(*) n FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? AND column_name = 'ativo'", tabela))[0]?.n ?? 0) > 0;
 
-  const registros = all<any>(
-    `SELECT t.*,
+  const consultasUso: Record<string, string> = {
+    marcas: "SELECT COUNT(*) FROM produtos WHERE marca_id = t.id",
+    cores: "SELECT COUNT(*) FROM variacoes WHERE cor_id = t.id",
+    categorias: "SELECT COUNT(*) FROM produtos WHERE categoria_id = t.id OR subcategoria_id = t.id",
+    texturas: "SELECT COUNT(*) FROM produtos WHERE textura_id = t.id",
+    comprimentos: "SELECT COUNT(*) FROM variacoes WHERE comprimento_valor = t.valor AND comprimento_unidade = t.unidade",
+    formas_pagamento: "SELECT COUNT(*) FROM vendas_pagamentos WHERE forma_pagamento_id = t.id",
+    tipos_produto: "SELECT COUNT(*) FROM produtos WHERE tipo_produto_id = t.id",
+    materiais: "SELECT COUNT(*) FROM produtos WHERE material_id = t.id",
+    tipos_fibra: "SELECT COUNT(*) FROM produtos WHERE tipo_fibra_id = t.id",
+    tecnicas: "SELECT COUNT(*) FROM produtos WHERE tecnica_id = t.id",
+    publicos: "SELECT COUNT(*) FROM produtos WHERE publico_id = t.id",
+    linhas_colecao: "SELECT COUNT(*) FROM produtos WHERE linha_id = t.id",
+  };
+
+  const registros = await all<any>(
+    `SELECT t.*, ${consultasUso[tabela] ? "(" + consultasUso[tabela] + ")" : "0"} usos,
             ${tabela === "linhas_colecao" ? "(SELECT nome FROM marcas m WHERE m.id = t.marca_id)" : "NULL"} marca,
             ${tabela === "categorias" ? "(SELECT nome FROM categorias c2 WHERE c2.id = t.pai_id)" : "NULL"} pai
      FROM ${tabela} t
      ORDER BY ${def.ordem ?? (tabela === "categorias" ? "pai_id NULLS FIRST, nome" : "nome")}`
   );
 
-  const usos: Record<string, number> = {};
-  if (tabela === "marcas") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE marca_id = ?", r.id)[0].n;
-  if (tabela === "cores") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM variacoes WHERE cor_id = ?", r.id)[0].n;
-  if (tabela === "categorias") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE categoria_id = ? OR subcategoria_id = ?", r.id, r.id)[0].n;
-  if (tabela === "texturas") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE textura_id = ?", r.id)[0].n;
-  if (tabela === "comprimentos") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM variacoes WHERE comprimento_valor = ? AND comprimento_unidade = ?", r.valor, r.unidade)[0].n;
-  if (tabela === "formas_pagamento") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM vendas_pagamentos WHERE forma_pagamento_id = ?", r.id)[0].n;
-  if (tabela === "tipos_produto") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE tipo_produto_id = ?", r.id)[0].n;
-  if (tabela === "materiais") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE material_id = ?", r.id)[0].n;
-  if (tabela === "tipos_fibra") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE tipo_fibra_id = ?", r.id)[0].n;
-  if (tabela === "tecnicas") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE tecnica_id = ?", r.id)[0].n;
-  if (tabela === "publicos") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE publico_id = ?", r.id)[0].n;
-  if (tabela === "linhas_colecao") for (const r of registros) usos[r.id] = all<{ n: number }>("SELECT COUNT(*) n FROM produtos WHERE linha_id = ?", r.id)[0].n;
+  const usos: Record<string, number> = Object.fromEntries(registros.map((r) => [r[pk], r.usos]));
 
-  const marcas = all<{ id: number; nome: string }>("SELECT id, nome FROM marcas ORDER BY nome");
-  const categoriasPai = all<{ id: number; nome: string }>("SELECT id, nome FROM categorias WHERE pai_id IS NULL ORDER BY nome");
+  const [marcas, categoriasPai] = await Promise.all([
+    all<{ id: number; nome: string }>("SELECT id, nome FROM marcas ORDER BY nome"),
+    all<{ id: number; nome: string }>("SELECT id, nome FROM categorias WHERE pai_id IS NULL ORDER BY nome"),
+  ]);
 
   return (
     <>

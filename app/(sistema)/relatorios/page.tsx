@@ -19,91 +19,88 @@ export default async function PaginaRelatorios({
   const sp = await searchParams;
   const dias = [7, 15, 30, 60, 90, 180, 365].includes(Number(sp.dias)) ? Number(sp.dias) : 30;
 
-  const periodo = resumoPeriodo(dias);
-  const serie = vendasPorDia(Math.min(dias, 60));
-  const top = topProdutos(dias, 12);
-  const topSku = topVariacoes(dias, 15);
-  const cores = corQueMaisGira(dias, 10);
-  const linhas = investimentoPorLinha();
-  const abc = curvaABC(dias);
-  const alertas = alertasEstoque(30);
-  const fiado = fiadoAberto();
-
-  const porForma = all<any>(
-    `SELECT fp.nome forma, fp.tipo, COUNT(*) qtd, SUM(vp.valor) valor,
-            SUM(vp.parcelas) parcelas
-     FROM vendas_pagamentos vp
-     JOIN vendas v ON v.id = vp.venda_id
-     JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id
-     WHERE v.status='concluida' AND date(v.data) >= date('now','localtime','-${dias} days')
-     GROUP BY fp.id ORDER BY valor DESC`
-  );
-
-  const porOperador = all<any>(
-    `SELECT u.nome operador, u.papel, COUNT(*) vendas, SUM(v.total) total,
-            SUM(v.total - v.custo_total) lucro, AVG(v.total) ticket
-     FROM vendas v JOIN usuarios u ON u.id = v.usuario_id
-     WHERE v.status='concluida' AND date(v.data) >= date('now','localtime','-${dias} days')
-     GROUP BY u.id ORDER BY total DESC`
-  );
-
-  const porVendedor = all<any>(
-    `SELECT COALESCE(u.apelido, u.nome) vendedor, COUNT(*) vendas, SUM(v.total) total,
-            SUM(v.total - v.custo_total) lucro,
-            SUM(v.total * COALESCE(u.comissao_pct,0) / 100.0) comissao
-     FROM vendas v JOIN usuarios u ON u.id = v.vendedor_id
-     WHERE v.status='concluida' AND date(v.data) >= date('now','localtime','-${dias} days')
-     GROUP BY u.id ORDER BY total DESC`
-  );
-
-  const porMarca = all<any>(
-    `SELECT COALESCE(vv.marca,'(sem marca)') marca, COUNT(DISTINCT vi.variacao_id) skus,
-            SUM(vi.quantidade) pecas, SUM(vi.total) receita,
-            SUM(vi.total - vi.quantidade*vi.custo_unitario) lucro
-     FROM vendas_itens vi
-     JOIN vendas v ON v.id = vi.venda_id
-     JOIN vw_variacoes vv ON vv.variacao_id = vi.variacao_id
-     WHERE v.status='concluida' AND date(v.data) >= date('now','localtime','-${dias} days')
-     GROUP BY vv.marca ORDER BY receita DESC`
-  );
-
-  const porDiaSemana = all<any>(
-    `SELECT CAST(strftime('%w', v.data) AS INTEGER) dow, COUNT(*) vendas, SUM(v.total) total
-     FROM vendas v WHERE v.status='concluida' AND date(v.data) >= date('now','localtime','-${dias} days')
-     GROUP BY dow ORDER BY dow`
-  );
+  const [periodo, serie, top, topSku, cores, linhas, abc, alertas, fiado, porForma, porOperador, porVendedor, porMarca, porDiaSemana] = await Promise.all([
+    resumoPeriodo(dias),
+    vendasPorDia(Math.min(dias, 60)),
+    topProdutos(dias, 12),
+    topVariacoes(dias, 15),
+    corQueMaisGira(dias, 10),
+    investimentoPorLinha(),
+    curvaABC(dias),
+    alertasEstoque(30),
+    fiadoAberto(),
+    all<any>(
+      `SELECT fp.nome forma, fp.tipo, COUNT(*) qtd, SUM(vp.valor) valor,
+              SUM(vp.parcelas) parcelas
+       FROM vendas_pagamentos vp
+       JOIN vendas v ON v.id = vp.venda_id
+       JOIN formas_pagamento fp ON fp.id = vp.forma_pagamento_id
+       WHERE v.status='concluida' AND CAST(v.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '${dias} days')::date
+       GROUP BY fp.id ORDER BY valor DESC`
+    ),
+    all<any>(
+      `SELECT u.nome operador, u.papel, COUNT(*) vendas, SUM(v.total) total,
+              SUM(v.total - v.custo_total) lucro, AVG(v.total) ticket
+       FROM vendas v JOIN usuarios u ON u.id = v.usuario_id
+       WHERE v.status='concluida' AND CAST(v.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '${dias} days')::date
+       GROUP BY u.id ORDER BY total DESC`
+    ),
+    all<any>(
+      `SELECT COALESCE(u.apelido, u.nome) vendedor, COUNT(*) vendas, SUM(v.total) total,
+              SUM(v.total - v.custo_total) lucro,
+              SUM(v.total * COALESCE(u.comissao_pct,0) / 100.0) comissao
+       FROM vendas v JOIN usuarios u ON u.id = v.vendedor_id
+       WHERE v.status='concluida' AND CAST(v.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '${dias} days')::date
+       GROUP BY u.id ORDER BY total DESC`
+    ),
+    all<any>(
+      `SELECT COALESCE(vv.marca,'(sem marca)') marca, COUNT(DISTINCT vi.variacao_id) skus,
+              SUM(vi.quantidade) pecas, SUM(vi.total) receita,
+              SUM(vi.total - vi.quantidade*vi.custo_unitario) lucro
+       FROM vendas_itens vi
+       JOIN vendas v ON v.id = vi.venda_id
+       JOIN vw_variacoes vv ON vv.variacao_id = vi.variacao_id
+       WHERE v.status='concluida' AND CAST(v.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '${dias} days')::date
+       GROUP BY vv.marca ORDER BY receita DESC`
+    ),
+    all<any>(
+      `SELECT CAST(EXTRACT(DOW FROM v.data::timestamp) AS INTEGER) dow, COUNT(*) vendas, SUM(v.total) total
+       FROM vendas v WHERE v.status='concluida' AND CAST(v.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '${dias} days')::date
+       GROUP BY dow ORDER BY dow`
+    ),
+  ]);
   const nomesDow = ["Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"];
 
-  const semVenda = all<any>(
-    `SELECT vv.sku, vv.produto, vv.cor_codigo, vv.comprimento, vv.comprimento_unidade,
-            vv.estoque, vv.estoque_custo, vv.preco_venda,
-            (SELECT MAX(v.data) FROM vendas_itens vi JOIN vendas v ON v.id=vi.venda_id
-             WHERE vi.variacao_id = vv.variacao_id AND v.status<>'cancelada') ultima_venda
-     FROM vw_estoque_posicao vv
-     WHERE vv.variacao_status='ativo' AND vv.estoque > 0
-       AND NOT EXISTS (SELECT 1 FROM vendas_itens vi JOIN vendas v ON v.id = vi.venda_id
-                       WHERE vi.variacao_id = vv.variacao_id AND v.status<>'cancelada'
-                         AND date(v.data) >= date('now','localtime','-${dias} days'))
-     ORDER BY vv.estoque_custo DESC LIMIT 25`
-  );
-
-  const topClientes = all<any>(
-    `SELECT c.nome, COUNT(*) compras, SUM(v.total) total, AVG(v.total) ticket
-     FROM vendas v JOIN clientes c ON c.id = v.cliente_id
-     WHERE v.status='concluida' AND date(v.data) >= date('now','localtime','-${dias} days')
-     GROUP BY c.id ORDER BY total DESC LIMIT 12`
-  );
-
-  const fornecedoresBaratos = all<any>(
-    `SELECT p.nome produto, vv.sku, f.nome_fantasia fornecedor, pf.custo, vv.custo_medio,
-            ROUND((vv.custo_medio - pf.custo) * 100.0 / NULLIF(vv.custo_medio,0), 1) economia_pct
-     FROM produto_fornecedor pf
-     JOIN fornecedores f ON f.id = pf.fornecedor_id
-     JOIN variacoes vv ON vv.id = pf.variacao_id
-     JOIN produtos p ON p.id = pf.produto_id
-     WHERE pf.custo IS NOT NULL AND vv.custo_medio > 0 AND pf.custo < vv.custo_medio
-     ORDER BY economia_pct DESC LIMIT 20`
-  );
+  const [semVenda, topClientes, fornecedoresBaratos] = await Promise.all([
+    all<any>(
+      `SELECT vv.sku, vv.produto, vv.cor_codigo, vv.comprimento, vv.comprimento_unidade,
+              vv.estoque, vv.estoque_custo, vv.preco_venda,
+              (SELECT MAX(v.data) FROM vendas_itens vi JOIN vendas v ON v.id=vi.venda_id
+               WHERE vi.variacao_id = vv.variacao_id AND v.status<>'cancelada') ultima_venda
+       FROM vw_estoque_posicao vv
+       WHERE vv.variacao_status='ativo' AND vv.estoque > 0
+         AND NOT EXISTS (SELECT 1 FROM vendas_itens vi JOIN vendas v ON v.id = vi.venda_id
+                         WHERE vi.variacao_id = vv.variacao_id AND v.status<>'cancelada'
+                           AND CAST(v.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '${dias} days')::date)
+       ORDER BY vv.estoque_custo DESC LIMIT 25`
+    ),
+    all<any>(
+      `SELECT c.nome, COUNT(*) compras, SUM(v.total) total, AVG(v.total) ticket
+       FROM vendas v JOIN clientes c ON c.id = v.cliente_id
+       WHERE v.status='concluida' AND CAST(v.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '${dias} days')::date
+       GROUP BY c.id ORDER BY total DESC LIMIT 12`
+    ),
+    all<any>(
+      `SELECT p.nome produto, vv.sku, f.nome_fantasia fornecedor, pf.custo, vv.custo_medio,
+              ROUND((vv.custo_medio - pf.custo) * 100.0 / NULLIF(vv.custo_medio,0), 1) economia_pct
+       FROM produto_fornecedor pf
+       JOIN fornecedores f ON f.id = pf.fornecedor_id
+       JOIN variacoes vv ON vv.id = pf.variacao_id
+       JOIN produtos p ON p.id = pf.produto_id
+       WHERE pf.custo IS NOT NULL AND vv.custo_medio > 0 AND pf.custo < vv.custo_medio
+       ORDER BY economia_pct DESC LIMIT 20`
+    ),
+  ]);
 
   const totalAbc = abc.reduce((s, a) => s + a.receita, 0);
   const classeA = abc.filter((a) => a.classe === "A");

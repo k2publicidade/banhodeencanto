@@ -20,31 +20,32 @@ export default async function FichaCliente({
   const sp = await searchParams;
   const clienteId = Number(id);
 
-  const c = one<any>("SELECT * FROM clientes WHERE id = ?", clienteId);
+  const c = await one<any>("SELECT * FROM clientes WHERE id = ?", clienteId);
   if (!c) notFound();
 
-  const fiado = all<any>(
-    `SELECT f.*, fp.nome forma, u.nome usuario, v.numero venda_numero
-     FROM fiado_lancamentos f
-     LEFT JOIN formas_pagamento fp ON fp.id = f.forma_pagamento_id
-     LEFT JOIN usuarios u ON u.id = f.usuario_id
-     LEFT JOIN vendas v ON v.id = f.venda_id
-     WHERE f.cliente_id = ? ORDER BY f.id DESC`,
-    clienteId
-  );
+  const [fiado, vendas] = await Promise.all([
+    all<any>(
+      `SELECT f.*, fp.nome forma, u.nome usuario, v.numero venda_numero
+       FROM fiado_lancamentos f
+       LEFT JOIN formas_pagamento fp ON fp.id = f.forma_pagamento_id
+       LEFT JOIN usuarios u ON u.id = f.usuario_id
+       LEFT JOIN vendas v ON v.id = f.venda_id
+       WHERE f.cliente_id = ? ORDER BY f.id DESC`,
+      clienteId
+    ),
+    all<any>(
+      `SELECT v.id, v.numero, v.data, v.total, v.status, u.nome operador,
+              (SELECT COUNT(*) FROM vendas_itens vi WHERE vi.venda_id = v.id) itens
+       FROM vendas v LEFT JOIN usuarios u ON u.id = v.usuario_id
+       WHERE v.cliente_id = ? ORDER BY v.id DESC LIMIT 100`,
+      clienteId
+    ),
+  ]);
 
-  const vendas = all<any>(
-    `SELECT v.id, v.numero, v.data, v.total, v.status, u.nome operador,
-            (SELECT COUNT(*) FROM vendas_itens vi WHERE vi.venda_id = v.id) itens
-     FROM vendas v LEFT JOIN usuarios u ON u.id = v.usuario_id
-     WHERE v.cliente_id = ? ORDER BY v.id DESC LIMIT 100`,
-    clienteId
-  );
-
-  const saldo = one<{ s: number }>(
+  const saldo = (await one<{ s: number }>(
     "SELECT COALESCE(SUM(CASE WHEN tipo='compra' THEN valor ELSE -valor END),0) s FROM fiado_lancamentos WHERE cliente_id = ?",
     clienteId
-  )?.s ?? 0;
+  ))?.s ?? 0;
 
   const totalGasto = vendas.filter((v) => v.status !== "cancelada").reduce((s, v) => s + Number(v.total), 0);
   const ticket = vendas.length ? totalGasto / vendas.filter((v) => v.status !== "cancelada").length : 0;

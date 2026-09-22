@@ -8,7 +8,7 @@ export async function GET() {
   const u = await sessao();
   if (!u) return new Response("nao autorizado", { status: 401 });
 
-  const linhas = all<any>(
+  const linhas = await all<any>(
     `SELECT sku, ean, produto, marca, linha, categoria, subcategoria, tipo_produto, material, fibra,
             textura, tecnica, cor, cor_codigo, comprimento, comprimento_unidade,
             custo_medio, preco_venda, ROUND(margem_percentual,2) margem_pct, ROUND(markup,3) markup,

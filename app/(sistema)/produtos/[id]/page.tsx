@@ -40,7 +40,7 @@ export default async function PaginaProduto({
   const produtoId = Number(id);
   const aba = ABAS.some((a) => a.id === sp.aba) ? sp.aba! : "identificacao";
 
-  const p = one<any>(
+  const p = await one<any>(
     `SELECT p.*, m.nome marca, lc.nome linha, cat.nome categoria, sub.nome subcategoria,
             tp.nome tipo_produto, mat.nome material, tf.nome fibra, tx.nome textura,
             tec.nome tecnica, pub.nome publico, co.nome cor_padrao, co.codigo cor_padrao_codigo, co.hex cor_padrao_hex,
@@ -63,31 +63,30 @@ export default async function PaginaProduto({
   );
   if (!p) notFound();
 
-  const f = listaFiltros();
+  const [f, variacoes, vinculos, metricas] = await Promise.all([
+    listaFiltros(),
+    all<any>(
+      `SELECT * FROM vw_estoque_posicao WHERE produto_id = ? ORDER BY cor_codigo, comprimento`,
+      produtoId
+    ),
+    all<any>(
+      `SELECT pf.*, fo.nome_fantasia, fo.razao_social, vv.sku, vv.cor_codigo, vv.comprimento, vv.comprimento_unidade
+       FROM produto_fornecedor pf
+       JOIN fornecedores fo ON fo.id = pf.fornecedor_id
+       LEFT JOIN vw_variacoes vv ON vv.variacao_id = pf.variacao_id
+       WHERE pf.produto_id = ?
+       ORDER BY pf.principal DESC, pf.custo`,
+      produtoId
+    ),
+    one<any>(
+      `SELECT COUNT(*) skus, SUM(estoque) pecas, SUM(estoque_custo) estoque_custo, SUM(estoque_venda) estoque_venda,
+              AVG(margem_percentual) margem_media, MIN(preco_venda) preco_min, MAX(preco_venda) preco_max
+       FROM vw_estoque_posicao WHERE produto_id = ?`,
+      produtoId
+    ),
+  ]);
 
-  const variacoes = all<any>(
-    `SELECT * FROM vw_estoque_posicao WHERE produto_id = ? ORDER BY cor_codigo, comprimento`,
-    produtoId
-  );
-
-  const vinculos = all<any>(
-    `SELECT pf.*, fo.nome_fantasia, fo.razao_social, vv.sku, vv.cor_codigo, vv.comprimento, vv.comprimento_unidade
-     FROM produto_fornecedor pf
-     JOIN fornecedores fo ON fo.id = pf.fornecedor_id
-     LEFT JOIN vw_variacoes vv ON vv.variacao_id = pf.variacao_id
-     WHERE pf.produto_id = ?
-     ORDER BY pf.principal DESC, pf.custo`,
-    produtoId
-  );
-
-  const metricas = one<any>(
-    `SELECT COUNT(*) skus, SUM(estoque) pecas, SUM(estoque_custo) estoque_custo, SUM(estoque_venda) estoque_venda,
-            AVG(margem_percentual) margem_media, MIN(preco_venda) preco_min, MAX(preco_venda) preco_max
-     FROM vw_estoque_posicao WHERE produto_id = ?`,
-    produtoId
-  );
-
-  const vendas = one<any>(
+  const vendas = await one<any>(
     `SELECT COALESCE(SUM(vi.quantidade),0) pecas, COALESCE(SUM(vi.total),0) receita,
             COALESCE(SUM(vi.total - vi.quantidade*vi.custo_unitario),0) lucro,
             MIN(v.data) primeira, MAX(v.data) ultima, COUNT(DISTINCT v.id) num_vendas
@@ -97,11 +96,11 @@ export default async function PaginaProduto({
     produtoId
   ) ?? {};
 
-  const rankingGlobal = all<{ variacao_id: number; receita: number; acumulado: number }>(
+  const rankingGlobal = await all<{ variacao_id: number; receita: number; acumulado: number }>(
     `WITH r AS (
        SELECT vi.variacao_id, SUM(vi.total) receita
        FROM vendas_itens vi JOIN vendas v ON v.id = vi.venda_id
-       WHERE v.status='concluida' AND date(v.data) >= date('now','localtime','-90 days')
+       WHERE v.status='concluida' AND CAST(v.data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '90 days')::date
        GROUP BY vi.variacao_id
      )
      SELECT variacao_id, receita,
@@ -111,12 +110,12 @@ export default async function PaginaProduto({
   );
   const somaReceitaRank = rankingGlobal.reduce((s, r) => s + r.receita, 0) || 1;
 
-  const porMes = all<any>(
-    `SELECT strftime('%Y-%m', v.data) mes, COUNT(DISTINCT v.id) vendas, SUM(vi.quantidade) pecas, SUM(vi.total) receita
+  const porMes = await all<any>(
+    `SELECT to_char(v.data::timestamp, 'YYYY-MM') mes, COUNT(DISTINCT v.id) vendas, SUM(vi.quantidade) pecas, SUM(vi.total) receita
      FROM vendas_itens vi JOIN vendas v ON v.id = vi.venda_id
      JOIN variacoes v2 ON v2.id = vi.variacao_id
      WHERE v2.produto_id = ? AND v.status <> 'cancelada'
-     GROUP BY strftime('%Y-%m', v.data) ORDER BY mes DESC LIMIT 12`,
+     GROUP BY to_char(v.data::timestamp, 'YYYY-MM') ORDER BY mes DESC LIMIT 12`,
     produtoId
   );
 

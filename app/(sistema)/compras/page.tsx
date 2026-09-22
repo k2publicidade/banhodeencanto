@@ -20,32 +20,32 @@ export default async function PaginaCompras({
   if (sp.status) { where.push("c.status = ?"); params.push(sp.status); }
   if (sp.fornecedor) { where.push("c.fornecedor_id = ?"); params.push(Number(sp.fornecedor)); }
 
-  const compras = all<any>(
-    `SELECT c.id, c.numero, c.data, c.documento, c.status, c.subtotal, c.frete, c.desconto, c.total,
-            f.nome_fantasia fornecedor, f.razao_social, u.nome usuario, c.confirmado_em,
-            (SELECT COUNT(*) FROM compras_itens ci WHERE ci.compra_id = c.id) itens,
-            (SELECT COALESCE(SUM(ci.quantidade),0) FROM compras_itens ci WHERE ci.compra_id = c.id) pecas
-     FROM compras c
-     JOIN fornecedores f ON f.id = c.fornecedor_id
-     LEFT JOIN usuarios u ON u.id = c.usuario_id
-     WHERE ${where.join(" AND ")}
-     ORDER BY c.id DESC LIMIT 200`,
-    ...params
-  );
-
-  const totais = one<any>(
-    `SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN status='confirmado' THEN total ELSE 0 END),0) confirmado,
-            SUM(CASE WHEN status='rascunho' THEN 1 ELSE 0 END) rascunhos
-     FROM compras`
-  );
-  const mes = one<any>(
-    `SELECT COUNT(*) n, COALESCE(SUM(total),0) total FROM compras
-     WHERE status='confirmado' AND date(data) >= date('now','localtime','-30 days')`
-  );
-
-  const fornecedores = all<{ id: number; nome: string }>(
-    "SELECT id, COALESCE(nome_fantasia, razao_social) nome FROM fornecedores WHERE ativo=1 ORDER BY nome_fantasia"
-  );
+  const [compras, totais, mes, fornecedores] = await Promise.all([
+    all<any>(
+      `SELECT c.id, c.numero, c.data, c.documento, c.status, c.subtotal, c.frete, c.desconto, c.total,
+              f.nome_fantasia fornecedor, f.razao_social, u.nome usuario, c.confirmado_em,
+              (SELECT COUNT(*) FROM compras_itens ci WHERE ci.compra_id = c.id) itens,
+              (SELECT COALESCE(SUM(ci.quantidade),0) FROM compras_itens ci WHERE ci.compra_id = c.id) pecas
+       FROM compras c
+       JOIN fornecedores f ON f.id = c.fornecedor_id
+       LEFT JOIN usuarios u ON u.id = c.usuario_id
+       WHERE ${where.join(" AND ")}
+       ORDER BY c.id DESC LIMIT 200`,
+      ...params
+    ),
+    one<any>(
+      `SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN status='confirmado' THEN total ELSE 0 END),0) confirmado,
+              SUM(CASE WHEN status='rascunho' THEN 1 ELSE 0 END) rascunhos
+       FROM compras`
+    ),
+    one<any>(
+      `SELECT COUNT(*) n, COALESCE(SUM(total),0) total FROM compras
+       WHERE status='confirmado' AND CAST(data AS DATE) >= ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - INTERVAL '30 days')::date`
+    ),
+    all<{ id: number; nome: string }>(
+      "SELECT id, COALESCE(nome_fantasia, razao_social) nome FROM fornecedores WHERE ativo=1 ORDER BY nome_fantasia"
+    ),
+  ]);
 
   return (
     <>

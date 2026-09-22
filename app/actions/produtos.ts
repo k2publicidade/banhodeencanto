@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { all, one, run, tx, auditar, config } from "@/lib/db";
+import { all, one, run, tx, auditar } from "@/lib/db";
 import { slugify, arred, parseMoeda } from "@/lib/format";
 import { ean13Interno, codigoInterno } from "@/lib/barcode";
 import { exigir } from "@/lib/auth";
@@ -93,18 +93,18 @@ export async function salvarProduto(form: FormData, idExistente?: number) {
 
 
   try {
-    const id = tx(() => {
+    const id = await tx(async () => {
       if (idExistente) {
         const sets = Object.keys(campos).map((k) => `${k} = ?`).join(", ");
-        run(`UPDATE produtos SET ${sets}, atualizado_em = datetime('now','localtime') WHERE id = ?`, ...Object.values(campos), idExistente);
-        auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "alterar", entidade: "produtos", entidade_id: idExistente, detalhe: nome });
+        await run(`UPDATE produtos SET ${sets}, atualizado_em = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD HH24:MI:SS') WHERE id = ?`, ...Object.values(campos), idExistente);
+        await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "alterar", entidade: "produtos", entidade_id: idExistente, detalhe: nome });
         return idExistente;
       }
       const cols = Object.keys(campos).join(", ");
       const ph = Object.keys(campos).map(() => "?").join(",");
-      const r = run(`INSERT INTO produtos(${cols}) VALUES (${ph})`, ...Object.values(campos));
+      const r = await run(`INSERT INTO produtos(${cols}) VALUES (${ph}) RETURNING id`, ...Object.values(campos));
       const novo = Number(r.lastInsertRowid);
-      auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "criar", entidade: "produtos", entidade_id: novo, detalhe: nome });
+      await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "criar", entidade: "produtos", entidade_id: novo, detalhe: nome });
       return novo;
     });
     revalidatePath("/produtos");
@@ -130,10 +130,10 @@ export async function excluirProduto(id: number) {
   const u = await exigir();
   if (u.papel !== "admin") return { ok: false, erro: "Somente o administrador pode excluir produtos." };
   try {
-    tx(() => {
-      run("DELETE FROM variacoes WHERE produto_id = ?", id);
-      run("DELETE FROM produtos WHERE id = ?", id);
-      auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "excluir", entidade: "produtos", entidade_id: id });
+    await tx(async () => {
+      await run("DELETE FROM variacoes WHERE produto_id = ?", id);
+      await run("DELETE FROM produtos WHERE id = ?", id);
+      await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "excluir", entidade: "produtos", entidade_id: id });
     });
   } catch (e: any) {
     return { ok: false, erro: e?.message || "Falha ao excluir." };
@@ -155,26 +155,26 @@ export async function gerarVariacoes(
   markup: number
 ) {
   const u = await exigir();
-  const p = one<any>("SELECT id, sku, nome, publico_id, tipo_produto_id FROM produtos WHERE id = ?", produtoId);
+  const p = await one<any>("SELECT id, sku, nome, publico_id, tipo_produto_id FROM produtos WHERE id = ?", produtoId);
   if (!p) return { ok: false, erro: "Produto nao encontrado." };
 
   const cores = coresIds.length
-    ? all<any>(`SELECT id, nome, codigo FROM cores WHERE id IN (${coresIds.map(() => "?").join(",")})`, ...coresIds)
+    ? await all<any>(`SELECT id, nome, codigo FROM cores WHERE id IN (${coresIds.map(() => "?").join(",")})`, ...coresIds)
     : [null];
   const comps = comprimentosIds.length
-    ? all<any>(`SELECT id, valor, unidade FROM comprimentos WHERE id IN (${comprimentosIds.map(() => "?").join(",")})`, ...comprimentosIds)
+    ? await all<any>(`SELECT id, valor, unidade FROM comprimentos WHERE id IN (${comprimentosIds.map(() => "?").join(",")})`, ...comprimentosIds)
     : [];
 
   let criadas = 0;
   let ignoradas = 0;
-  let seq = one<{ n: number }>("SELECT COALESCE(MAX(id),0) n FROM variacoes")?.n ?? 0;
-  const maxEan = one<{ n: number }>("SELECT COALESCE(MAX(CAST(SUBSTR(ean,4,9) AS INTEGER)),100000000) n FROM variacoes WHERE ean LIKE '200%'")?.n ?? 100000000;
 
   try {
-    tx(() => {
+    await tx(async () => {
+      let seq = Number((await one<{ n: number }>("SELECT COALESCE(MAX(id),0) n FROM variacoes"))?.n ?? 0);
+      const maxEan = Number((await one<{ n: number }>("SELECT COALESCE(MAX(CAST(SUBSTR(ean,4,9) AS INTEGER)),100000000) n FROM variacoes WHERE ean LIKE '200%'"))?.n ?? 100000000);
       for (const c of cores) {
         for (const cp of comps) {
-          const existe = one<{ id: number }>(
+          const existe = await one<{ id: number }>(
             `SELECT id FROM variacoes WHERE produto_id = ?
              AND COALESCE(cor_id,0) = COALESCE(?,0)
              AND COALESCE(comprimento_valor,0) = COALESCE(?,0)
@@ -191,26 +191,26 @@ export async function gerarVariacoes(
           const custo = arred(custoBase * (cp?.valor >= 100 ? 1.35 : cp?.valor >= 80 ? 1.15 : 1));
           const preco = arred(custo * (markup > 0 ? markup : 2.2));
           const ean = ean13Interno(maxEan + criadas + 1);
-          run(
+          await run(
             `INSERT INTO variacoes(produto_id, sku, ean, codigo_interno, cor_id, cor_codigo_fabricante, cor_nome_comercial,
                comprimento_valor, comprimento_unidade, publico_id, custo_aquisicao, custo_medio, ultimo_custo,
                preco_venda, preco_minimo_autorizado, data_ultima_alteracao_preco, estoque_min, estoque_max,
                ponto_reposicao, unidade_estoque, status)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime'),5,100,5,'PCT','ativo')`,
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,to_char(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD HH24:MI:SS'),5,100,5,'PCT','ativo')`,
             produtoId, sku, ean, codigoInterno(seq), c?.id ?? null, c?.codigo ?? null,
             c ? `${c.nome} ${c.codigo}` : null, cp?.valor ?? null, cp?.unidade ?? null, p.publico_id ?? null,
             custo, custo, custo, preco, arred(preco * 0.9)
           );
-          const varId = one<{ id: number }>("SELECT id FROM variacoes WHERE sku = ?", sku)?.id;
+          const varId = (await one<{ id: number }>("SELECT id FROM variacoes WHERE sku = ?", sku))?.id;
           if (varId) {
-            for (const loja of all<{ id: number }>("SELECT id FROM lojas WHERE ativa = 1")) {
-              run("INSERT OR IGNORE INTO estoque(variacao_id, loja_id, quantidade, reservado) VALUES (?,?,0,0)", varId, loja.id);
+            for (const loja of await all<{ id: number }>("SELECT id FROM lojas WHERE ativa = 1")) {
+              await run("INSERT INTO estoque(variacao_id, loja_id, quantidade, reservado) VALUES (?,?,0,0) ON CONFLICT DO NOTHING", varId, loja.id);
             }
           }
           criadas++;
         }
       }
-      auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "gerar_variacoes", entidade: "produtos", entidade_id: produtoId, detalhe: `${criadas} criadas, ${ignoradas} ja existiam` });
+      await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "gerar_variacoes", entidade: "produtos", entidade_id: produtoId, detalhe: `${criadas} criadas, ${ignoradas} ja existiam` });
     });
   } catch (e: any) {
     return { ok: false, erro: e?.message || "Falha ao gerar variacoes." };
@@ -223,9 +223,6 @@ export async function salvarVariacao(form: FormData) {
   const u = await exigir();
   const id = ID(form.get("__id"));
   if (!id) return { ok: false, erro: "Variacao nao informada." };
-
-  const anterior = one<any>("SELECT preco_venda, custo_medio, produto_id FROM variacoes WHERE id = ?", id);
-  if (!anterior) return { ok: false, erro: "Variacao nao encontrada." };
 
   const custo = N(form.get("custo_aquisicao"));
   const preco = N(form.get("preco_venda"));
@@ -264,44 +261,48 @@ export async function salvarVariacao(form: FormData) {
     observacoes: S(form.get("observacoes")),
   };
 
+  let produtoId = 0;
   try {
-    tx(() => {
+    await tx(async () => {
+      const anterior = await one<any>("SELECT preco_venda, custo_medio, produto_id FROM variacoes WHERE id = ?", id);
+      if (!anterior) throw new Error("Variacao nao encontrada.");
+      produtoId = anterior.produto_id;
       const sets = Object.keys(campos).map((k) => `${k} = ?`).join(", ");
       const mudouPreco = preco !== Number(anterior.preco_venda);
-      run(
-        `UPDATE variacoes SET ${sets}${mudouPreco ? ", data_ultima_alteracao_preco = datetime('now','localtime')" : ""} WHERE id = ?`,
+      await run(
+        `UPDATE variacoes SET ${sets}${mudouPreco ? ", data_ultima_alteracao_preco = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD HH24:MI:SS')" : ""} WHERE id = ?`,
         ...Object.values(campos), id
       );
       if (mudouPreco) {
-        run(
+        await run(
           `INSERT INTO precos_historico(variacao_id, preco_anterior, preco_novo, usuario_id, usuario_nome)
            VALUES (?,?,?,?,?)`,
           id, Number(anterior.preco_venda), preco, u.id, u.nome
         );
       }
-      auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "alterar", entidade: "variacoes", entidade_id: id, detalhe: `${campos.sku} preco=${preco}` });
+      await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "alterar", entidade: "variacoes", entidade_id: id, detalhe: `${campos.sku} preco=${preco}` });
     });
   } catch (e: any) {
     const msg = String(e?.message || "");
     if (msg.includes("UNIQUE")) return { ok: false, erro: "SKU ou codigo de barras ja usado em outra variacao." };
     return { ok: false, erro: msg || "Falha ao salvar a variacao." };
   }
-  revalidatePath(`/produtos/${anterior.produto_id}`);
+  revalidatePath(`/produtos/${produtoId}`);
   revalidatePath("/produtos");
   return { ok: true };
 }
 
 export async function excluirVariacao(id: number) {
   const u = await exigir();
-  const v = one<any>("SELECT produto_id, sku FROM variacoes WHERE id = ?", id);
+  const v = await one<any>("SELECT produto_id, sku FROM variacoes WHERE id = ?", id);
   if (!v) return { ok: false, erro: "Variacao nao encontrada." };
-  const usado = one<{ n: number }>("SELECT COUNT(*) n FROM vendas_itens WHERE variacao_id = ?", id)?.n ?? 0;
+  const usado = (await one<{ n: number }>("SELECT COUNT(*) n FROM vendas_itens WHERE variacao_id = ?", id))?.n ?? 0;
   if (usado > 0) {
     return { ok: false, erro: `Este SKU tem ${usado} venda(s) registrada(s). Marque como "descontinuado" em vez de excluir, para preservar o historico.` };
   }
   try {
-    run("DELETE FROM variacoes WHERE id = ?", id);
-    auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "excluir", entidade: "variacoes", entidade_id: id, detalhe: v.sku });
+    await run("DELETE FROM variacoes WHERE id = ?", id);
+    await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "excluir", entidade: "variacoes", entidade_id: id, detalhe: v.sku });
   } catch (e: any) {
     return { ok: false, erro: e?.message || "Falha ao excluir." };
   }
@@ -316,10 +317,10 @@ export async function ajustarPrecosProduto(
   valor: number
 ) {
   const u = await exigir();
-  const vs = all<any>("SELECT id, custo_medio, preco_venda FROM variacoes WHERE produto_id = ?", produtoId);
   let n = 0;
   try {
-    tx(() => {
+    await tx(async () => {
+      const vs = await all<any>("SELECT id, custo_medio, preco_venda FROM variacoes WHERE produto_id = ?", produtoId);
       for (const v of vs) {
         const custo = Number(v.custo_medio);
         let novo = Number(v.preco_venda);
@@ -327,17 +328,17 @@ export async function ajustarPrecosProduto(
         else if (modo === "margem") novo = custo > 0 ? arred(custo / (1 - Math.min(valor, 99.5) / 100)) : Number(v.preco_venda);
         else if (modo === "markup") novo = arred(custo * valor);
         if (novo <= 0 || Math.abs(novo - Number(v.preco_venda)) < 0.005) continue;
-        run(
-          "UPDATE variacoes SET preco_venda = ?, data_ultima_alteracao_preco = datetime('now','localtime') WHERE id = ?",
+        await run(
+          "UPDATE variacoes SET preco_venda = ?, data_ultima_alteracao_preco = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD HH24:MI:SS') WHERE id = ?",
           novo, v.id
         );
-        run(
+        await run(
           "INSERT INTO precos_historico(variacao_id, preco_anterior, preco_novo, usuario_id, usuario_nome) VALUES (?,?,?,?,?)",
           v.id, Number(v.preco_venda), novo, u.id, u.nome
         );
         n++;
       }
-      auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "ajuste_preco_lote", entidade: "produtos", entidade_id: produtoId, detalhe: `${modo} ${valor} -> ${n} SKUs` });
+      await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "ajuste_preco_lote", entidade: "produtos", entidade_id: produtoId, detalhe: `${modo} ${valor} -> ${n} SKUs` });
     });
   } catch (e: any) {
     return { ok: false, erro: e?.message || "Falha no ajuste de precos." };
@@ -370,8 +371,8 @@ export async function aplicarEstoquePadrao(produtoId: number, form: FormData) {
   if (sets.length === 0) return { ok: false, erro: "Informe ao menos um parametro." };
 
   try {
-    const r = run(`UPDATE variacoes SET ${sets.join(", ")} WHERE produto_id = ?`, ...vals, produtoId);
-    auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "aplicar_estoque_padrao", entidade: "produtos", entidade_id: produtoId, detalhe: sets.join(", ") });
+    const r = await run(`UPDATE variacoes SET ${sets.join(", ")} WHERE produto_id = ?`, ...vals, produtoId);
+    await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "aplicar_estoque_padrao", entidade: "produtos", entidade_id: produtoId, detalhe: sets.join(", ") });
     revalidatePath(`/produtos/${produtoId}`);
     return { ok: true, alterados: Number(r.changes) };
   } catch (e: any) {
@@ -391,8 +392,8 @@ export async function vincularFornecedor(form: FormData) {
   if (!produtoId || !fornecedorId) return { ok: false, erro: "Informe o fornecedor." };
 
   try {
-    tx(() => {
-      run(
+    await tx(async () => {
+      await run(
         `INSERT INTO produto_fornecedor(produto_id, variacao_id, fornecedor_id, codigo_fornecedor, referencia_fabricante,
            custo, qtd_minima_compra, multiplo_compra, prazo_entrega_dias, principal, observacoes)
          VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -403,7 +404,7 @@ export async function vincularFornecedor(form: FormData) {
         form.get("prazo_entrega_dias") === "" ? null : N(form.get("prazo_entrega_dias")),
         BOOL(form.get("principal")), S(form.get("observacoes"))
       );
-      auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "vincular_fornecedor", entidade: "produtos", entidade_id: produtoId });
+      await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: "vincular_fornecedor", entidade: "produtos", entidade_id: produtoId });
     });
   } catch (e: any) {
     return { ok: false, erro: e?.message || "Falha ao vincular fornecedor." };
@@ -414,7 +415,7 @@ export async function vincularFornecedor(form: FormData) {
 
 export async function removerVinculoFornecedor(id: number, produtoId: number) {
   await exigir();
-  run("DELETE FROM produto_fornecedor WHERE id = ?", id);
+  await run("DELETE FROM produto_fornecedor WHERE id = ?", id);
   revalidatePath(`/produtos/${produtoId}`);
   return { ok: true };
 }
@@ -447,8 +448,8 @@ export async function criarAuxiliar(tabela: string, dados: Record<string, string
   if (usadas.length === 0) return { ok: false, erro: "Informe ao menos um campo." };
 
   try {
-    const r = run(
-      `INSERT INTO ${tabela}(${usadas.join(",")}) VALUES (${usadas.map(() => "?").join(",")})`,
+    const r = await run(
+      `INSERT INTO ${tabela}(${usadas.join(",")}) VALUES (${usadas.map(() => "?").join(",")}) RETURNING id`,
       ...usadas.map((c) => dados[c] as any)
     );
     return { ok: true, id: Number(r.lastInsertRowid) };

@@ -17,24 +17,26 @@ export default async function NovaCompra({
   await exigir();
   const sp = await searchParams;
 
-  const fornecedores = all<{ id: number; nome: string; prazo_medio_entrega: number | null }>(
-    "SELECT id, COALESCE(nome_fantasia, razao_social) nome, prazo_medio_entrega FROM fornecedores WHERE ativo=1 ORDER BY nome_fantasia"
-  );
-  const lojas = all<{ id: number; nome: string }>("SELECT id, nome FROM lojas WHERE ativa=1 ORDER BY padrao DESC, nome");
+  const [fornecedores, lojas] = await Promise.all([
+    all<{ id: number; nome: string; prazo_medio_entrega: number | null }>(
+      "SELECT id, COALESCE(nome_fantasia, razao_social) nome, prazo_medio_entrega FROM fornecedores WHERE ativo=1 ORDER BY nome_fantasia"
+    ),
+    all<{ id: number; nome: string }>("SELECT id, nome FROM lojas WHERE ativa=1 ORDER BY padrao DESC, nome"),
+  ]);
 
   let opcoes: any[] = [];
   if (sp.q && sp.q.trim().length >= 2) {
-    opcoes = all<any>(
+    opcoes = await all<any>(
       `SELECT variacao_id, sku, produto, cor_codigo, comprimento, comprimento_unidade, custo_medio, disponivel, produto_id
        FROM vw_estoque_posicao
-       WHERE (produto LIKE ? COLLATE NOCASE OR sku LIKE ? COLLATE NOCASE OR cor_codigo LIKE ?)
+       WHERE (produto ILIKE ? OR sku ILIKE ? OR cor_codigo ILIKE ?)
        ORDER BY produto, cor_codigo LIMIT 250`,
       "%" + sp.q + "%", "%" + sp.q + "%", "%" + sp.q + "%"
     );
   }
 
   // Sugestao de compra: SKUs no ponto de reposicao ou abaixo
-  const sugestoes = all<any>(
+  const sugestoes = await all<any>(
     `SELECT variacao_id, sku, produto, cor_codigo, cor_hex, comprimento, comprimento_unidade,
             disponivel, estoque_min, estoque_max, ponto_reposicao, custo_medio, situacao_estoque, produto_id
      FROM vw_estoque_posicao

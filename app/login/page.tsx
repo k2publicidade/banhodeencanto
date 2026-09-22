@@ -9,7 +9,7 @@ export default async function PaginaLogin() {
   const u = await sessao();
   if (u) redirect("/painel");
 
-  const loja = one<{ nome: string; apelido: string }>("SELECT nome, apelido FROM lojas WHERE padrao = 1 LIMIT 1");
+  const loja = await one<{ nome: string; apelido: string }>("SELECT nome, apelido FROM lojas WHERE padrao = 1 LIMIT 1");
 
   return (
     <div className="login">
@@ -67,7 +67,7 @@ export default async function PaginaLogin() {
 
           <FormLogin />
 
-          <details className="login-dica">
+          {process.env.NODE_ENV !== "production" && <details className="login-dica">
             <summary>Acessos de demonstracao</summary>
             <div>
               Administrador: <code>admin@banhodeencanto.com.br</code> / <code>encanto123</code>
@@ -75,7 +75,7 @@ export default async function PaginaLogin() {
             <div>
               Operador de caixa: <code>caixa@banhodeencanto.com.br</code> / <code>encanto123</code>
             </div>
-          </details>
+          </details>}
         </div>
       </div>
     </div>

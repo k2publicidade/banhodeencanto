@@ -1,194 +1,118 @@
-import { DatabaseSync } from "node:sqlite";
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { Pool, types, type PoolClient } from "pg";
+import { attachDatabasePool } from "@vercel/functions";
 
-/**
- * Conexao unica com o banco (SQLite nativo do Node).
- * O arquivo fica em <projeto>/data/banho.db.
- */
+// A interface usa numeros, inclusive nos agregados COUNT/SUM do PostgreSQL.
+types.setTypeParser(20, Number);
+types.setTypeParser(1700, Number);
 
-const DATA_DIR = join(process.cwd(), "data");
+const context = new AsyncLocalStorage<PoolClient>();
+const globalDb = globalThis as typeof globalThis & { __bde_pool?: Pool };
 
-/**
- * Caminho do banco. Por padrao <projeto>/data/banho.db; em hospedagem com disco
- * proprio (Docker, VPS) aponte para o volume com BDE_DB_PATH=/dados/banho.db.
- * Em ambiente serverless (Vercel) o sistema do arquivos e somente leitura, entao
- * o banco precisa ficar em BDE_DB_PATH apontando para um disco de verdade ou
- * para um servico de banco - veja docs/DEPLOY.md.
- */
-export const DB_PATH = process.env.BDE_DB_PATH || join(DATA_DIR, "banho.db");
-
-type GlobalWithDb = typeof globalThis & { __bde_db?: DatabaseSync };
-const g = globalThis as GlobalWithDb;
-
-function createDb(): DatabaseSync {
-  // A pasta do banco pode estar fora do projeto (volume do Docker, /dados...)
-  const dirDoBanco = dirname(DB_PATH);
-  if (!existsSync(dirDoBanco)) mkdirSync(dirDoBanco, { recursive: true });
-  const db = new DatabaseSync(DB_PATH);
-  db.exec("PRAGMA foreign_keys = ON;");
-  db.exec("PRAGMA journal_mode = WAL;");
-  db.exec("PRAGMA busy_timeout = 8000;");
-
-  // Garante o schema (idempotente) na primeira conexao
-  const hasProdutos = db
-    .prepare("select count(*) n from sqlite_master where type='table' and name='produtos'")
-    .get() as { n: number };
-  if (!hasProdutos || hasProdutos.n === 0) {
-    const schemaPath = join(process.cwd(), "lib", "schema.sql");
-    if (existsSync(schemaPath)) db.exec(readFileSync(schemaPath, "utf8"));
+export function getDb(): Pool {
+  if (!globalDb.__bde_pool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error("Configure DATABASE_URL com a conexao PostgreSQL do Supabase.");
+    const url = new URL(connectionString);
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (!local && !url.searchParams.has("sslmode")) url.searchParams.set("sslmode", "require");
+    if (!local && !url.searchParams.has("uselibpqcompat")) url.searchParams.set("uselibpqcompat", "true");
+    const pool = new Pool({
+      connectionString: url.toString(), max: 1, idleTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000, allowExitOnIdle: true,
+    });
+    pool.on("error", (error) => console.error("[db] Conexao PostgreSQL interrompida:", error.message));
+    if (process.env.VERCEL) attachDatabasePool(pool);
+    globalDb.__bde_pool = pool;
   }
-  return db;
+  return globalDb.__bde_pool;
 }
 
-export function getDb(): DatabaseSync {
-  if (!g.__bde_db) g.__bde_db = createDb();
-  return g.__bde_db;
+/** Converte apenas placeholders fora de strings, identificadores e comentarios. */
+export function parametrosPostgres(sql: string): string {
+  let index = 0;
+  return sql.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|--[^\r\n]*|\/\*[\s\S]*?\*\/|\?/g,
+    (token) => token === "?" ? `$${++index}` : token);
 }
 
-/* ------------------------------------------------------------------ */
-/* Helpers de consulta                                                 */
-/*                                                                     */
-/* node:sqlite devolve linhas com PROTOTIPO NULO. O React recusa      */
-/* passar esses objetos a Client Components ("Only plain objects...   */
-/* can be passed"), por isso todo resultado e convertido em objeto    */
-/* comum antes de sair da camada de dados.                            */
-/* ------------------------------------------------------------------ */
-
-const plain = <T>(r: any): T => (r === null || r === undefined ? r : ({ ...r } as T));
-
-/** Reexecuta com o SQL no erro: sem isso, um erro de SQL fica impossivel de rastrear. */
-function comContexto<T>(sql: string, params: any[], fn: () => T): T {
+async function connection<T>(fn: (client: PoolClient) => Promise<T>, write = false): Promise<T> {
+  const current = context.getStore();
+  if (current) return fn(current);
+  const client = await getDb().connect();
+  let discard = false;
   try {
-    return fn();
-  } catch (e: any) {
-    const compacto = sql.replace(/\s+/g, " ").trim().slice(0, 400);
-    const err = new Error(`[db] ${e?.message || e} | SQL: ${compacto} | params: ${JSON.stringify(params)}`);
-    (err as any).cause = e;
-    throw err;
+    // SET LOCAL funciona inclusive no pooler em modo Transaction do Supabase.
+    await client.query("BEGIN; SET LOCAL search_path = banho_encanto, pg_catalog; SET LOCAL statement_timeout = '30s'; SET LOCAL lock_timeout = '15s'");
+    if (write) await client.query("SELECT pg_advisory_xact_lock(184206, 1)");
+    const result = await context.run(client, () => fn(client));
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch { discard = true; }
+    throw error;
+  } finally {
+    client.release(discard);
   }
 }
 
-export function all<T = any>(sql: string, ...params: any[]): T[] {
-  return comContexto(sql, params, () => {
-    const linhas = getDb().prepare(sql).all(...params) as any[];
-    return linhas.map((r) => plain<T>(r));
+export async function all<T = any>(sql: string, ...params: any[]): Promise<T[]> {
+  return connection(async (client) => (await client.query(parametrosPostgres(sql), params)).rows as T[]);
+}
+
+export async function one<T = any>(sql: string, ...params: any[]): Promise<T | undefined> {
+  return (await all<T>(sql, ...params))[0];
+}
+
+/** INSERTs que precisam do id devem declarar RETURNING id. */
+export async function run(sql: string, ...params: any[]) {
+  return connection(async (client) => {
+    const result = await client.query(parametrosPostgres(sql), params);
+    return { changes: result.rowCount ?? 0, lastInsertRowid: Number(result.rows[0]?.id ?? 0) };
+  }, true);
+}
+
+export async function exec(sql: string): Promise<void> {
+  await connection(async (client) => { await client.query(sql); }, true);
+}
+
+/** Uma conexao por transacao e rollback integral. Escritas seguem a ordem do antigo SQLite. */
+export async function tx<T>(fn: () => Promise<T>): Promise<T> {
+  return connection(() => fn(), true);
+}
+
+export async function proximoNumero(nome: string, prefixo: string, largura = 6, tabela?: string): Promise<string> {
+  if (tabela && !["vendas", "compras", "devolucoes"].includes(tabela)) throw new Error("Tabela de numeracao invalida.");
+  return tx(async () => {
+    await run("INSERT INTO sequencias(nome, ultimo) VALUES (?, 0) ON CONFLICT(nome) DO NOTHING", nome);
+    if (tabela) {
+      const maior = await one<{ m: number | null }>(
+        `SELECT MAX(CASE WHEN SUBSTR(numero, ?) ~ '^[0-9]+$' THEN CAST(SUBSTR(numero, ?) AS INTEGER) END) m FROM ${tabela}`,
+        prefixo.length + 1, prefixo.length + 1);
+      await run("UPDATE sequencias SET ultimo = GREATEST(ultimo, ?) WHERE nome = ?", maior?.m ?? 0, nome);
+    }
+    const result = await one<{ ultimo: number }>("UPDATE sequencias SET ultimo = ultimo + 1 WHERE nome = ? RETURNING ultimo", nome);
+    return prefixo + String(result!.ultimo).padStart(largura, "0");
   });
 }
 
-export function one<T = any>(sql: string, ...params: any[]): T | undefined {
-  return comContexto(sql, params, () => plain<T | undefined>(getDb().prepare(sql).get(...params)));
+export async function auditar(opts: {
+  usuario_id?: number | null; usuario_nome?: string | null; acao: string;
+  entidade: string; entidade_id?: number | null; detalhe?: string | null;
+}): Promise<void> {
+  // Falhas fazem a operacao inteira voltar; nao deixam uma transacao PG abortada silenciosamente.
+  await run(`INSERT INTO auditoria(usuario_id, usuario_nome, acao, entidade, entidade_id, detalhe)
+    VALUES (?,?,?,?,?,?)`, opts.usuario_id ?? null, opts.usuario_nome ?? null,
+    opts.acao, opts.entidade, opts.entidade_id ?? null, opts.detalhe ?? null);
 }
 
-export function run(sql: string, ...params: any[]) {
-  return getDb().prepare(sql).run(...params);
+export async function config(chave: string, padrao = ""): Promise<string> {
+  return (await one<{ valor: string }>("SELECT valor FROM configuracoes WHERE chave = ?", chave))?.valor ?? padrao;
 }
 
-export function exec(sql: string) {
-  return getDb().exec(sql);
-}
-
-/** Executa varias operacoes numa transacao: rollback automatico se falhar. */
-export function tx<T>(fn: () => T): T {
-  const db = getDb();
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const r = fn();
-    db.exec("COMMIT");
-    return r;
-  } catch (e) {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-      /* ignora */
-    }
-    throw e;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Sequenciais (numeracao de venda / compra / devolucao / cliente)      */
-/* ------------------------------------------------------------------ */
-
-/**
- * Sequenciais (numeracao de venda / compra / devolucao / cliente).
- *
- * A tabela `sequencias` guarda o ultimo numero emitido, mas ela pode ficar
- * fora de sincronia (por exemplo num banco semeado: as vendas existem e a
- * sequencia nao). Por isso, quando o nome da tabela e informado, o numero
- * gerado e conferido contra ela: se ja existir, a sequencia avanca ate achar
- * um numero livre. Assim a numeracao nunca quebra por UNIQUE constraint.
- */
-export function proximoNumero(nome: string, prefixo: string, largura = 6, tabela?: string): string {
-  const db = getDb();
-  db.prepare("INSERT OR IGNORE INTO sequencias(nome, ultimo) VALUES (?, 0)").run(nome);
-
-  const montar = (n: number) => prefixo + String(n).padStart(largura, "0");
-  const existe = (numero: string) =>
-    tabela ? Number((db.prepare(`SELECT COUNT(*) n FROM ${tabela} WHERE numero = ?`).get(numero) as { n: number }).n) > 0 : false;
-
-  if (tabela) {
-    // Alinha a sequencia com o maior numero ja gravado, se preciso.
-    const maior = db
-      .prepare(`SELECT MAX(CAST(SUBSTR(numero, ?) AS INTEGER)) m FROM ${tabela}`)
-      .get(prefixo.length + 1) as { m: number | null };
-    const ultimo = (db.prepare("SELECT ultimo FROM sequencias WHERE nome = ?").get(nome) as { ultimo: number }).ultimo;
-    if (maior.m !== null && maior.m > ultimo) {
-      db.prepare("UPDATE sequencias SET ultimo = ? WHERE nome = ?").run(maior.m, nome);
-    }
-  }
-
-  for (let tentativa = 0; tentativa < 1000; tentativa++) {
-    db.prepare("UPDATE sequencias SET ultimo = ultimo + 1 WHERE nome = ?").run(nome);
-    const numero = montar((db.prepare("SELECT ultimo FROM sequencias WHERE nome = ?").get(nome) as { ultimo: number }).ultimo);
-    if (!existe(numero)) return numero;
-  }
-  throw new Error(`Nao foi possivel gerar um numero livre para ${nome} (sequencia muito defasada).`);
-}
-
-/* ------------------------------------------------------------------ */
-/* Auditoria                                                           */
-/* ------------------------------------------------------------------ */
-
-export function auditar(opts: {
-  usuario_id?: number | null;
-  usuario_nome?: string | null;
-  acao: string;
-  entidade: string;
-  entidade_id?: number | null;
-  detalhe?: string | null;
-}) {
-  try {
-    run(
-      `INSERT INTO auditoria(usuario_id, usuario_nome, acao, entidade, entidade_id, detalhe)
-       VALUES (?,?,?,?,?,?)`,
-      opts.usuario_id ?? null,
-      opts.usuario_nome ?? null,
-      opts.acao,
-      opts.entidade,
-      opts.entidade_id ?? null,
-      opts.detalhe ?? null
-    );
-  } catch {
-    /* auditoria nunca derruba a operacao principal */
-  }
-}
-
-/** Configuracoes chave/valor */
-export function config(chave: string, padrao = ""): string {
-  const r = one<{ valor: string }>("SELECT valor FROM configuracoes WHERE chave = ?", chave);
-  return r?.valor ?? padrao;
-}
-
-export function salvarConfig(chave: string, valor: string, descricao?: string) {
-  run(
-    `INSERT INTO configuracoes(chave, valor, descricao, atualizado_em)
-     VALUES (?,?,?, datetime('now','localtime'))
-     ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor,
-       descricao = COALESCE(excluded.descricao, configuracoes.descricao),
-       atualizado_em = datetime('now','localtime')`,
-    chave,
-    valor,
-    descricao ?? null
-  );
+export async function salvarConfig(chave: string, valor: string, descricao?: string): Promise<void> {
+  await run(`INSERT INTO configuracoes(chave, valor, descricao) VALUES (?,?,?)
+    ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor,
+      descricao = COALESCE(excluded.descricao, configuracoes.descricao),
+      atualizado_em = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD HH24:MI:SS')`,
+    chave, valor, descricao ?? null);
 }
