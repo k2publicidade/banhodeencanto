@@ -578,6 +578,25 @@ try {
     return `${documentosDepois - documentosAntes} documento(s), total ${total} pecas preservado`;
   });
 
+  await passo("aplicar-estoques-supabase.ps1 roda no Windows (schema + divisao)", async () => {
+    const totalAntes = Number((await linhas(`SELECT COALESCE(SUM(quantidade),0) s FROM ${SCHEMA}.estoque`))[0].s);
+    const r = await rodar(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/aplicar-estoques-supabase.ps1",
+       "-DatabaseUrl", DATABASE_URL, "-Dividir", "-Percentual", "30"],
+      { ...env, DATABASE_URL, BDE_SECRET }
+    );
+    const saida = (r.saida || "").replace(/\u001b\[[0-9;]*m/g, "");
+    assert.equal(r.code, 0, "o PowerShell retornou " + r.code + ": " + saida.slice(-900));
+    assert.ok(/schema OK/i.test(saida), "nao confirmou o schema: " + saida.slice(-500));
+    assert.ok(/Pronto: schema aplicado e estoque separado/i.test(saida), "nao concluiu a divisao: " + saida.slice(-500));
+    assert.ok(/total de pecas continua/i.test(saida), "nao conferiu o total de pecas");
+
+    const total = Number((await linhas(`SELECT COALESCE(SUM(quantidade),0) s FROM ${SCHEMA}.estoque`))[0].s);
+    assert.equal(total, totalAntes, "o wrapper mexeu no total de pecas");
+    return "wrapper do PowerShell OK (schema + 30% para o galpao)";
+  });
+
   /* ---------------------------------------------------------------- */
 } catch (e) {
   falhas++;
