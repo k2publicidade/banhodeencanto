@@ -554,6 +554,30 @@ try {
     return `${comSaldo} colunas por estoque`;
   });
 
+  await passo("estoque:dividir:pg separa o estoque no PostgreSQL (script de producao)", async () => {
+    const totalAntes = Number((await linhas(`SELECT COALESCE(SUM(quantidade),0) s FROM ${SCHEMA}.estoque`))[0].s);
+    const documentosAntes = Number((await linhas(`SELECT COUNT(*) n FROM ${SCHEMA}.transferencias`))[0].n);
+    const galpaoAntes = Number((await linhas(`SELECT COALESCE(SUM(quantidade),0) s FROM ${SCHEMA}.estoque WHERE loja_id = $1`, [galpao.id]))[0].s);
+
+    const r = await rodar(
+      process.execPath,
+      ["scripts/estoque-dividir-postgres.mjs", "--confirmar", "--refazer", "--percentual=25"],
+      { ...env, DATABASE_URL, BDE_SECRET }
+    );
+    assert.equal(r.code, 0, "o script falhou: " + r.saida.slice(-900));
+    assert.ok(/schema OK/.test(r.saida), "nao aplicou/confirmou o schema: " + r.saida.slice(0, 400));
+    assert.ok(/total de pecas continua/.test(r.saida), "nao conferiu o total de pecas");
+    assert.ok(/documento\(s\) TRF-/.test(r.saida), "nao criou documento de transferencia");
+
+    const total = Number((await linhas(`SELECT COALESCE(SUM(quantidade),0) s FROM ${SCHEMA}.estoque`))[0].s);
+    const documentosDepois = Number((await linhas(`SELECT COUNT(*) n FROM ${SCHEMA}.transferencias`))[0].n);
+    const galpaoDepois = Number((await linhas(`SELECT COALESCE(SUM(quantidade),0) s FROM ${SCHEMA}.estoque WHERE loja_id = $1`, [galpao.id]))[0].s);
+    assert.equal(total, totalAntes, "o script mudou o total de pecas do banco");
+    assert.ok(documentosDepois > documentosAntes, "o script nao gravou documentoS de transferencia");
+    assert.ok(galpaoDepois > galpaoAntes, "o galpao nao recebeu pecas do script");
+    return `${documentosDepois - documentosAntes} documento(s), total ${total} pecas preservado`;
+  });
+
   /* ---------------------------------------------------------------- */
 } catch (e) {
   falhas++;

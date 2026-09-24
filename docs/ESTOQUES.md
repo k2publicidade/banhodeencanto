@@ -64,7 +64,8 @@ documento; saldo insuficiente bloqueia sem mudar nada; origem = destino recusada
 galpao nao abre caixa; venda baixa so do estoque do caixa; venda acima do saldo
 local bloqueada mesmo com saldo no galpao; cancelar estorna as duas pontas
 (liquido zero por SKU); cancelar bloqueado quando o destino ja consumiu; telas
-respondem; CSV tem uma coluna por estoque.
+respondem; CSV tem uma coluna por estoque; o `estoque:dividir:pg` aplica o schema
+e divide o estoque preservando o total de pecas.
 
 ## Numeracao
 
@@ -88,3 +89,18 @@ O script aplica o schema (sem apagar nada), cria o galpao se nao existir, faz
 backup do banco antes de escrever, grava transferencias de verdade e no final
 confere que o total de pecas continua o mesmo. A origem nunca fica zerada e SKUs
 ja criticos sao preservados para a tela de reposicao continuar fazendo sentido.
+
+### No producao (Supabase/PostgreSQL)
+
+O mesmo trabalho, falando direto com o PostgreSQL - e ja aplicando o schema novo
+(tabelas/views) de forma idempotente:
+
+```
+DATABASE_URL="postgresql://..." npm run estoque:dividir:pg                  # simulacao
+DATABASE_URL="postgresql://..." npm run estoque:dividir:pg -- --so-schema   # so aplica o DDL
+DATABASE_URL="postgresql://..." npm run estoque:dividir:pg -- --confirmar   # divide 60/40
+```
+
+Ordem recomendada no deploy: `--so-schema` (ou `--confirmar`, que aplica junto)
+**antes** de publicar o codigo novo - as telas usam as tabelas `transferencias`
+e as views `vw_estoques`/`vw_estoque_loja`.

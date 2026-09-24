@@ -34,7 +34,7 @@ verdade - nao precisam de internet nem do banco de producao:
 ```
 npm run test:postgres       # 15 verificacoes do driver, transacoes e regras
 npm run test:migracao       # migracao SQLite -> PostgreSQL preserva os dados
-npm run test:estoques       # 10 passos de estoques separados (ver docs/ESTOQUES.md)
+npm run test:estoques       # 11 passos de estoques separados (ver docs/ESTOQUES.md)
 npm run test:http-postgres  # build de producao: login + 26 rotas + CSVs
 npm run revisar:ui:estoques # fotos das telas de estoque (celular e desktop)
 ```

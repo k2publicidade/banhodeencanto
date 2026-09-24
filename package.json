@@ -18,6 +18,7 @@
     "db:seed": "node scripts/db-seed.mjs",
     "db:sequencias": "node scripts/sincronizar-sequencias.mjs",
     "estoque:dividir": "node scripts/estoque-dividir.mjs",
+    "estoque:dividir:pg": "node scripts/estoque-dividir-postgres.mjs",
     "db:backup": "node scripts/backup-banco.mjs",
     "apresentar": "node scripts/apresentar.mjs",
     "verificar:link": "node scripts/verificar-link-publico.mjs",
