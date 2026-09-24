@@ -10,6 +10,7 @@ npm run dev              # dev server (porta 3000)
 npm run build            # build de producao (roda o TypeScript)
 npm run db:reset -- --confirmar   # recria o banco vazio
 npm run db:seed          # dados de demonstracao (90 dias de movimento)
+npm run estoque:dividir  # divide o estoque entre loja e galpao (ver docs/ESTOQUES.md)
 npm run db:sequencias    # alinha a tabela `sequencias` com os numeros gravados
 npm run assets           # regenera logos leves e icones do app (precisa de sharp)
 
@@ -21,8 +22,31 @@ npm run test:fluxos      # 17 passos de regra de negocio (venda, fiado, desconto
 npm run test:mobile      # 18 passos no Chrome em viewport de celular
 npm run auditar:ui       # auditoria visual/estrutural de todas as telas (celular)
 npm run auditar:ui:desktop
-npm run test:tudo        # validar:schema + validar:sql + test:rotas
+npm run test:tudo        # test:postgres + test:migracao + build + test:estoques + test:http-postgres
 ```
+
+### Suites do PostgreSQL (as que valem hoje)
+
+Depois da migracao para Supabase/PostgreSQL, o sistema roda com `DATABASE_URL`.
+As suites abaixo sobem um PostgreSQL em memoria (PGlite) e testam o codigo de
+verdade - nao precisam de internet nem do banco de producao:
+
+```
+npm run test:postgres       # 15 verificacoes do driver, transacoes e regras
+npm run test:migracao       # migracao SQLite -> PostgreSQL preserva os dados
+npm run test:estoques       # 10 passos de estoques separados (ver docs/ESTOQUES.md)
+npm run test:http-postgres  # build de producao: login + 26 rotas + CSVs
+npm run revisar:ui:estoques # fotos das telas de estoque (celular e desktop)
+```
+
+`test:estoques` sobe `next dev` e chama as MESMAS server actions que a tela usa
+(postando formulario de verdade). `revisar:ui:estoques` precisa do Chrome e do
+puppeteer-core sob demanda (`npm i --no-save puppeteer-core`).
+
+> **Atencao:** `test:rotas`, `test:fluxos`, `test:mobile` e `auditar:ui` foram
+> escritos na epoca do SQLite (`data/banho.db` como banco do app). Hoje o app usa
+> PostgreSQL, entao esses scripts estao desatualizados e falham sem um adaptador
+> SQLite->PostgreSQL. Use as suites do PostgreSQL acima.
 
 `test:fluxos` e `test:mobile` copiam o banco para um arquivo de teste
 (`data/teste-fluxos.db`, `data/teste-mobile.db`), sobem servidor proprio e devolvem

@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { exigir } from "@/lib/auth";
 import { all, one } from "@/lib/db";
-import { moeda, pct, dataBR, dataHoraBR } from "@/lib/format";
+import { moeda, pct, dataBR, dataHoraBR, num } from "@/lib/format";
 import { listaFiltros, fornecedoresComparativo } from "@/lib/consultas";
+import { listarEstoques, saldosDoSku } from "@/lib/estoques";
 import { Cabecalho, Conteudo, Secao, Tabela, Vazio, Campo, CampoSelect, CampoArea, Linha, SituacaoEstoque, Grade, Kpi } from "@/components/ui";
 import { postSalvarVariacao } from "@/app/actions/produto-form";
 
@@ -47,6 +48,9 @@ export default async function PaginaVariacao({
       variacaoId
     ),
   ]);
+
+  // Saldo deste SKU em cada estoque (estoques separados)
+  const [estoques, saldos] = await Promise.all([listarEstoques(), saldosDoSku(variacaoId)]);
 
   const semFiscal = !v.ncm;
 
@@ -179,6 +183,47 @@ export default async function PaginaVariacao({
         </form>
 
         <div className="grade-responsiva">
+          <Secao
+            titulo="Saldo por estoque"
+            descricao="Este SKU pode ter saldo diferente em cada local"
+            acoes={<Link className="btn btn-sm btn-neutro" href={`/estoque/transferencia?item=${variacaoId}`}>Transferir este SKU</Link>}
+            padding={false}
+          >
+            {estoques.length === 0 ? (
+              <Vazio titulo="Nenhum estoque cadastrado" />
+            ) : (
+              <Tabela>
+                <thead>
+                  <tr>
+                    <th>Estoque</th>
+                    <th>Tipo</th>
+                    <th className="num">Saldo</th>
+                    <th className="num">Disponivel</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {estoques.map((e) => {
+                    const s = saldos.find((x) => x.loja_id === e.loja_id);
+                    return (
+                      <tr key={e.loja_id}>
+                        <td>
+                          <strong>{e.nome}</strong>
+                          {e.padrao ? <span className="tag tag-amarelo" style={{ marginLeft: 6, fontSize: 10 }}>VENDE</span> : null}
+                          <div style={{ fontSize: 11, color: "#7d7466" }}>
+                            <Link href={`/estoque?estoque=${e.loja_id}`}>ver posicao deste estoque</Link>
+                          </div>
+                        </td>
+                        <td><span className={"tag " + (e.eh_deposito ? "tag-azul" : "tag-verde")}>{e.eh_deposito ? "galpao" : "loja"}</span></td>
+                        <td className="num" style={{ fontWeight: 600 }}>{s ? num(s.quantidade) : "—"}</td>
+                        <td className="num">{s ? num(s.disponivel) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Tabela>
+            )}
+          </Secao>
+
           <Secao titulo="Movimentacoes de estoque" descricao="Ultimas 25" padding={false}>
             {movimentos.length === 0 ? (
               <Vazio titulo="Sem movimentacoes" />

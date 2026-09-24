@@ -34,6 +34,8 @@ type Linha = {
 type Props = {
   usuario: { id: number; nome: string; papel: string };
   caixa: { id: number; terminal: string | null; abertura_em: string; esperadoDinheiro: number } | null;
+  /** Estoque de onde o PDV vende (o do caixa aberto, ou o estoque padrao). */
+  estoque: { id: number; nome: string; eh_deposito: number; opcoes: { id: number; nome: string }[] };
   formas: { id: number; nome: string; tipo: string; aceita_troco: number }[];
   vendedores: { id: number; nome: string; apelido: string | null }[];
   config: Record<string, string>;
@@ -41,7 +43,8 @@ type Props = {
   resumoDia: { vendas: number; total: number; pecas: number };
 };
 
-export default function PdvCaixa({ usuario, caixa, formas, vendedores, config, resumoCaixa, resumoDia }: Props) {
+export default function PdvCaixa({ usuario, caixa, estoque, formas, vendedores, config, resumoCaixa, resumoDia }: Props) {
+  const estoqueId = estoque.id;
   const router = useRouter();
 
   const [linhas, setLinhas] = useState<Linha[]>([]);
@@ -92,7 +95,7 @@ export default function PdvCaixa({ usuario, caixa, formas, vendedores, config, r
     const t = window.setTimeout(async () => {
       setBuscando(true);
       try {
-        const r = await buscarItens(termo);
+        const r = await buscarItens(termo, 24, estoqueId);
         if (vivo) setResultados(r);
       } finally {
         if (vivo) setBuscando(false);
@@ -102,7 +105,7 @@ export default function PdvCaixa({ usuario, caixa, formas, vendedores, config, r
       vivo = false;
       window.clearTimeout(t);
     };
-  }, [termo]);
+  }, [termo, estoqueId]);
 
   useEffect(() => {
     if (buscaCliente.trim().length < 2) {
@@ -170,12 +173,12 @@ export default function PdvCaixa({ usuario, caixa, formas, vendedores, config, r
       e.preventDefault();
       const c = codigo.trim();
       if (!c) return;
-      const it = await buscarPorCodigo(c);
+      const it = await buscarPorCodigo(c, estoqueId);
       if (it) {
         adicionar(it);
         avisar("ok", `+ ${it.produto} ${it.cor_codigo ?? ""} ${it.comprimento ?? ""}`);
       } else {
-        const r = await buscarItens(c, 8);
+        const r = await buscarItens(c, 8, estoqueId);
         if (r.length === 1) {
           adicionar(r[0]);
           avisar("ok", `+ ${r[0].produto}`);
@@ -184,12 +187,12 @@ export default function PdvCaixa({ usuario, caixa, formas, vendedores, config, r
           setResultados(r);
           avisar("info", `${r.length} itens encontrados - escolha um.`);
         } else {
-          avisar("erro", `Codigo "${c}" nao encontrado.`);
+          avisar("erro", `Codigo "${c}" nao encontrado em ${estoque.nome}.`);
         }
       }
       setCodigo("");
     },
-    [codigo, adicionar, avisar]
+    [codigo, adicionar, avisar, estoqueId, estoque.nome]
   );
 
   const alterarQtd = (id: number, delta: number) =>
@@ -369,6 +372,9 @@ export default function PdvCaixa({ usuario, caixa, formas, vendedores, config, r
             <span>
               {caixa ? `${caixa.terminal || "CAIXA"} · aberto` : "CAIXA FECHADO"} · {usuario.nome}
             </span>
+            <span style={{ fontSize: 10.5, color: "var(--color-ouro-400)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              estoque: {estoque.nome}
+            </span>
           </div>
           {caixa ? (
             <span className="tag tag-verde" style={{ fontSize: 11 }}>
@@ -398,6 +404,8 @@ export default function PdvCaixa({ usuario, caixa, formas, vendedores, config, r
               {caixa ? `${caixa.terminal || "CAIXA"} • aberto` : "CAIXA FECHADO"} • {usuario.nome}
             </span>
           </div>
+
+          <Indicador rotulo="Estoque de venda" valor={estoque.nome} cor="#d9a44c" />
 
           {caixa ? (
             <>
@@ -1034,6 +1042,8 @@ export default function PdvCaixa({ usuario, caixa, formas, vendedores, config, r
       {modal === "caixa" ? (
         <Folha titulo="Abrir caixa" onFechar={() => setModal(null)} aviso={aviso}>
           <AbrirCaixaForm
+            estoqueId={estoqueId}
+            opcoes={estoque.opcoes}
             onOk={() => {
               setModal(null);
               avisar("ok", "Caixa aberto.");
@@ -1425,15 +1435,26 @@ function PagamentoForm(props: {
 /* Formularios de caixa                                                 */
 /* ==================================================================== */
 
-function AbrirCaixaForm({ onOk, onErro }: { onOk: () => void; onErro: (e: string) => void }) {
+function AbrirCaixaForm({
+  onOk,
+  onErro,
+  estoqueId,
+  opcoes,
+}: {
+  onOk: () => void;
+  onErro: (e: string) => void;
+  estoqueId: number;
+  opcoes: { id: number; nome: string }[];
+}) {
   const [valor, setValor] = useState("");
+  const [loja, setLoja] = useState(String(estoqueId));
   const [enviando, setEnviando] = useState(false);
   return (
     <form
       onSubmit={async (e) => {
         e.preventDefault();
         setEnviando(true);
-        const r = await abrirCaixa(parseMoeda(valor));
+        const r = await abrirCaixa(parseMoeda(valor), "CAIXA 1", Number(loja));
         setEnviando(false);
         if (!r.ok) onErro(r.erro || "Falha ao abrir caixa.");
         else onOk();
@@ -1443,6 +1464,17 @@ function AbrirCaixaForm({ onOk, onErro }: { onOk: () => void; onErro: (e: string
       <p style={{ fontSize: 13, color: "var(--color-creme-600)", margin: 0 }}>
         Informe o valor em dinheiro que esta sendo colocado na gaveta (fundo de troco).
       </p>
+      <div>
+        <label>Estoque de onde este caixa vende</label>
+        <select value={loja} onChange={(e) => setLoja(e.target.value)}>
+          {opcoes.map((o) => (
+            <option key={o.id} value={o.id}>{o.nome}</option>
+          ))}
+        </select>
+        <div style={{ fontSize: 11.5, color: "var(--color-creme-600)", marginTop: 4 }}>
+          A venda baixa do estoque escolhido. Galpao/deposito nao aparece aqui.
+        </div>
+      </div>
       <div>
         <label>Valor de abertura</label>
         <input

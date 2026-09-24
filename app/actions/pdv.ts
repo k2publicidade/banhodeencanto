@@ -34,39 +34,51 @@ export type ItemBusca = {
   ean13: string | null;
 };
 
-const CAMPOS_ITEM = `
+const CAMPOS_ITEM_BASE = `
   vv.variacao_id, vv.sku, vv.ean, vv.produto, vv.nome_reduzido, vv.marca,
   vv.cor, vv.cor_codigo, vv.cor_hex, vv.comprimento, vv.comprimento_unidade,
   vv.preco_venda, vv.preco_promocional, vv.custo_medio,
-  vv.estoque, vv.disponivel, vv.unidade_estoque,
+  %ESTOQUE%, vv.disponivel, vv.unidade_estoque,
   vv.localizacao, vv.corredor, vv.prateleira, vv.posicao,
   vv.ean as ean13
 `;
 
-/** Busca por nome, SKU, cor, marca, codigo interno ou codigo de barras. */
-export async function buscarItens(termo: string, limite = 24): Promise<ItemBusca[]> {
+/**
+ * Colunas do item do PDV. A view do estoque escolhido chama o saldo de
+ * `quantidade` e a view consolidada de `estoque`; aqui vira sempre `estoque`.
+ */
+function camposItem(doEstoque: boolean) {
+  return CAMPOS_ITEM_BASE.replace("%ESTOQUE%", doEstoque ? "vv.quantidade AS estoque" : "vv.estoque");
+}
+
+/** Busca por nome, SKU, cor, marca, codigo interno ou codigo de barras.
+ *  Com `lojaId`, o saldo mostrado e o do estoque escolhido (estoque separado). */
+export async function buscarItens(termo: string, limite = 24, lojaId?: number | null): Promise<ItemBusca[]> {
   await exigir();
   const t = String(termo || "").trim();
   if (t.length < 1) return [];
 
   const soDigitos = t.replace(/\D/g, "");
   const like = "%" + t.replace(/[%_]/g, "") + "%";
+  const doEstoque = Number(lojaId) > 0;
+  const origem = doEstoque ? "vw_estoque_loja vv" : "vw_variacoes vv";
+  const filtroLoja = doEstoque ? "vv.loja_id = ?" : "";
 
   // 1) Casamento exato por codigo (barras / interno / SKU) tem prioridade
   if (soDigitos.length >= 6) {
     const exatos = await all<ItemBusca>(
-      `SELECT ${CAMPOS_ITEM} FROM vw_variacoes vv
-       WHERE vv.ean = ? OR vv.codigo_interno = ? OR vv.sku = ?
+      `SELECT ${camposItem(doEstoque)} FROM ${origem}
+       WHERE (vv.ean = ? OR vv.codigo_interno = ? OR vv.sku = ?) ${doEstoque ? "AND " + filtroLoja : ""}
        LIMIT ?`,
-      soDigitos, t.toUpperCase(), t.toUpperCase(), limite
+      soDigitos, t.toUpperCase(), t.toUpperCase(), ...(doEstoque ? [Number(lojaId)] : []), limite
     );
     if (exatos.length) return exatos;
   }
 
   // 2) Busca textual
   return await all<ItemBusca>(
-    `SELECT ${CAMPOS_ITEM} FROM vw_variacoes vv
-     WHERE vv.variacao_status = 'ativo'
+    `SELECT ${camposItem(doEstoque)} FROM ${origem}
+     WHERE vv.variacao_status = 'ativo' ${doEstoque ? "AND " + filtroLoja : ""}
        AND (vv.produto ILIKE ?
             OR vv.nome_reduzido ILIKE ?
             OR vv.sku ILIKE ?
@@ -79,20 +91,23 @@ export async function buscarItens(termo: string, limite = 24): Promise<ItemBusca
        CASE WHEN vv.produto ILIKE ? THEN 0 ELSE 1 END,
        vv.produto, vv.cor_codigo, vv.comprimento
      LIMIT ?`,
+    ...(doEstoque ? [Number(lojaId)] : []),
     like, like, like, "%" + soDigitos + "%", like, like, like, like, t + "%", limite
   );
 }
 
 /** Casamento exato por codigo de barras / codigo interno / SKU (leitor USB). */
-export async function buscarPorCodigo(codigo: string): Promise<ItemBusca | null> {
+export async function buscarPorCodigo(codigo: string, lojaId?: number | null): Promise<ItemBusca | null> {
   await exigir();
   const c = String(codigo || "").trim();
   if (!c) return null;
+  const doEstoque = Number(lojaId) > 0;
+  const origem = doEstoque ? "vw_estoque_loja vv" : "vw_variacoes vv";
   const r = await one<ItemBusca>(
-    `SELECT ${CAMPOS_ITEM} FROM vw_variacoes vv
-     WHERE vv.ean = ? OR vv.codigo_interno = ? OR vv.sku = ? OR vv.ean = ?
+    `SELECT ${camposItem(doEstoque)} FROM ${origem}
+     WHERE (vv.ean = ? OR vv.codigo_interno = ? OR vv.sku = ? OR vv.ean = ?) ${doEstoque ? "AND vv.loja_id = ?" : ""}
      LIMIT 1`,
-    c, c.toUpperCase(), c.toUpperCase(), c.replace(/\D/g, "")
+    c, c.toUpperCase(), c.toUpperCase(), c.replace(/\D/g, ""), ...(doEstoque ? [Number(lojaId)] : [])
   );
   return r ?? null;
 }
@@ -117,8 +132,8 @@ export async function buscarClientes(termo: string, limite = 12) {
 /* ================================================================== */
 
 export async function caixaAberto() {
-  return await one<{ id: number; abertura_em: string; valor_abertura: number; terminal: string | null; usuario_id: number | null; operador: string | null }>(
-    `SELECT c.id, c.abertura_em, c.valor_abertura, c.terminal, c.usuario_id, u.nome AS operador
+  return await one<{ id: number; abertura_em: string; valor_abertura: number; terminal: string | null; usuario_id: number | null; operador: string | null; loja_id: number | null }>(
+    `SELECT c.id, c.abertura_em, c.valor_abertura, c.terminal, c.usuario_id, c.loja_id, u.nome AS operador
      FROM caixas c LEFT JOIN usuarios u ON u.id = c.usuario_id
      WHERE c.status = 'aberto' ORDER BY c.id DESC LIMIT 1`
   );
@@ -145,12 +160,26 @@ export async function resumoCaixa(caixaId: number) {
   return { ...r, abertura, esperadoDinheiro, totalGeral: arred(abertura + r.vendas + r.suprimentos - r.sangrias) };
 }
 
-export async function abrirCaixa(valorAbertura: number, terminal = "CAIXA 1") {
+export async function abrirCaixa(valorAbertura: number, terminal = "CAIXA 1", lojaId?: number | null) {
   const u = await exigir();
   const resultado = await tx(async () => {
     const ja = await caixaAberto();
     if (ja) return { ok: false, erro: "Ja existe um caixa aberto (" + (ja.terminal || "caixa") + ")." };
-    const loja = (await one<{ id: number }>("SELECT id FROM lojas WHERE padrao = 1 LIMIT 1"))?.id ?? 1;
+
+    // O caixa abre em um ESTOQUE: o PDV vende e baixa do estoque desse local.
+    let loja = Number(lojaId) > 0 ? Number(lojaId) : 0;
+    if (loja) {
+      const l = await one<any>("SELECT id, nome, eh_deposito, ativa FROM lojas WHERE id = ?", loja);
+      if (!l || !l.ativa) return { ok: false, erro: "Estoque invalido ou desativado." };
+      if (l.eh_deposito === 1) return { ok: false, erro: "Galpao/deposito nao vende no balcao: escolha um estoque do tipo loja." };
+    } else {
+      loja =
+        (await one<{ id: number }>("SELECT id FROM lojas WHERE ativa = 1 AND padrao = 1 AND eh_deposito = 0 LIMIT 1"))?.id ??
+        (await one<{ id: number }>("SELECT id FROM lojas WHERE ativa = 1 AND eh_deposito = 0 ORDER BY id LIMIT 1"))?.id ??
+        (await one<{ id: number }>("SELECT id FROM lojas WHERE ativa = 1 ORDER BY id LIMIT 1"))?.id ??
+        1;
+    }
+
     const r = await run(
       "INSERT INTO caixas(loja_id, usuario_id, terminal, valor_abertura, status) VALUES (?,?,?,?, 'aberto') RETURNING id",
       loja, u.id, terminal, arred(valorAbertura)
@@ -289,7 +318,10 @@ export async function finalizarVenda(p: PayloadVenda) {
   try {
     resultado = await tx(async () => {
       const cx = await caixaAberto();
-      const loja = (await one<{ id: number }>("SELECT id FROM lojas WHERE padrao = 1 LIMIT 1"))?.id ?? 1;
+      // Vende do estoque do caixa aberto; sem caixa aberto, usa o estoque
+      // marcado como padrao (o "estoque que vende").
+      const loja = cx?.loja_id ?? (await one<{ id: number }>("SELECT id FROM lojas WHERE padrao = 1 LIMIT 1"))?.id ?? 1;
+      const nomeLoja = (await one<{ nome: string }>("SELECT nome FROM lojas WHERE id = ?", loja))?.nome ?? "estoque";
       const numero = await proximoNumero("venda", "V", 6, "vendas");
       const permiteEstoqueNegativo = (await config("pdv_permite_estoque_negativo", "0")) === "1";
       const comissaoPct = Number(p.vendedor_id
@@ -314,8 +346,17 @@ export async function finalizarVenda(p: PayloadVenda) {
         if (!(qtd > 0)) throw new Error("Quantidade invalida para " + v.sku + ".");
 
         const permiteNegativo = Number(v.permite_estoque_negativo) === 1 || permiteEstoqueNegativo;
-        if (!permiteNegativo && Number(v.disponivel) < qtd) {
-          throw new Error(`Estoque insuficiente de ${v.produto} ${v.cor_codigo ?? ""}: disponivel ${v.disponivel}, pedido ${qtd}.`);
+        // O saldo conferido e o do ESTOQUE DO CAIXA (estoque separado), nao o total.
+        const local = await one<{ quantidade: number; reservado: number }>(
+          "SELECT quantidade, reservado FROM estoque WHERE variacao_id = ? AND loja_id = ?",
+          it.variacao_id, loja
+        );
+        const disponivelLocal = Number(local?.quantidade ?? 0) - Number(local?.reservado ?? 0);
+        if (!permiteNegativo && disponivelLocal < qtd) {
+          throw new Error(
+            `Estoque insuficiente de ${v.produto} ${v.cor_codigo ?? ""} em ${nomeLoja}: disponivel ${disponivelLocal}, pedido ${qtd}. ` +
+            `Transfira do galpao ou venda de outro estoque.`
+          );
         }
 
         const precoTabela = arred(Number(v.preco_promocional) > 0 && Number(v.preco_promocional) < Number(v.preco_venda)

@@ -67,11 +67,12 @@ try {
   const cookie = `bde_sessao=${body}.${signature}`;
   const routes = [
     "/painel", "/produtos", "/produtos/1", "/produtos/1/etiquetas",
-    "/produtos/novo", "/estoque", "/compras", "/compras/nova",
+    "/produtos/novo", "/estoque", "/estoque/transferencia", "/estoque/movimentos",
+    "/compras", "/compras/nova",
     "/clientes", "/clientes/1", "/fornecedores", "/vendas", "/vendas/1",
     "/relatorios", "/cadastros", "/cadastros/marcas", "/configuracoes",
     "/configuracoes/lojas", "/configuracoes/usuarios", "/caixa",
-    "/api/exportar/estoque", "/api/exportar/vendas", "/api/venda/1",
+    "/api/exportar/estoque", "/api/exportar/movimentos", "/api/exportar/vendas", "/api/venda/1",
   ];
   const failures = [];
   for (const route of routes) {

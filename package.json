@@ -11,11 +11,13 @@
     "test:postgres": "node scripts/teste-postgres.mjs",
     "test:migracao": "node scripts/teste-migracao-postgres.mjs",
     "test:http-postgres": "node scripts/teste-http-postgres.mjs",
+    "test:estoques": "node scripts/teste-estoques.mjs",
     "start": "next start",
     "lint": "next lint",
     "db:reset": "node scripts/db-reset.mjs",
     "db:seed": "node scripts/db-seed.mjs",
     "db:sequencias": "node scripts/sincronizar-sequencias.mjs",
+    "estoque:dividir": "node scripts/estoque-dividir.mjs",
     "db:backup": "node scripts/backup-banco.mjs",
     "apresentar": "node scripts/apresentar.mjs",
     "verificar:link": "node scripts/verificar-link-publico.mjs",
@@ -27,7 +29,8 @@
     "auditar:ui": "node scripts/auditar-ui.mjs",
     "auditar:ui:desktop": "node scripts/auditar-ui.mjs --desktop",
     "assets": "node scripts/gerar-assets.mjs",
-    "test:tudo": "npm run test:postgres && npm run test:migracao && npm run build && npm run test:http-postgres"
+    "revisar:ui:estoques": "node scripts/revisar-ui-estoques.mjs",
+    "test:tudo": "npm run test:postgres && npm run test:migracao && npm run build && npm run test:estoques && npm run test:http-postgres"
   },
   "dependencies": {
     "@vercel/functions": "^3.9.8",

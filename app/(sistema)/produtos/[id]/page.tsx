@@ -4,6 +4,7 @@ import { exigir } from "@/lib/auth";
 import { all, one } from "@/lib/db";
 import { moeda, pct, num, dataBR, dataHoraBR, arred } from "@/lib/format";
 import { listaFiltros, fornecedoresComparativo } from "@/lib/consultas";
+import { listarEstoques } from "@/lib/estoques";
 import {
   Cabecalho, Conteudo, Secao, Tabela, Vazio, Campo, CampoSelect, CampoArea, Linha,
   TagStatus, CorBolinha, SituacaoEstoque, Kpi, Grade, Barra,
@@ -95,6 +96,20 @@ export default async function PaginaProduto({
      WHERE v2.produto_id = ? AND v.status <> 'cancelada'`,
     produtoId
   ) ?? {};
+
+  // Saldo de cada SKU deste produto em CADA estoque (aba 5 - Estoque)
+  const [estoques, saldosLocal] = await Promise.all([
+    listarEstoques(),
+    all<any>(
+      `SELECT el.variacao_id, el.loja_id, el.loja, el.eh_deposito, el.quantidade
+       FROM vw_estoque_loja el
+       JOIN variacoes vv ON vv.id = el.variacao_id
+       WHERE vv.produto_id = ?`,
+      produtoId
+    ),
+  ]);
+  const saldosPorSku: Record<number, Record<number, number>> = {};
+  for (const s of saldosLocal) (saldosPorSku[s.variacao_id] ??= {})[s.loja_id] = Number(s.quantidade);
 
   const rankingGlobal = await all<{ variacao_id: number; receita: number; acumulado: number }>(
     `WITH r AS (
@@ -524,7 +539,11 @@ export default async function PaginaProduto({
               </form>
             </Secao>
 
-            <Secao titulo="Estoque por SKU e por unidade" descricao="Arquitetura preparada para multiplas lojas e depositos" padding={false}>
+            <Secao
+              titulo="Estoque por SKU e por estoque"
+              descricao="Saldo separado de cada local (galpao, loja, filial). O total e a soma dos locais."
+              padding={false}
+            >
               {variacoes.length === 0 ? (
                 <Vazio titulo="Sem SKUs" />
               ) : (
@@ -532,12 +551,12 @@ export default async function PaginaProduto({
                   <thead>
                     <tr>
                       <th>SKU</th>
-                      <th className="num">Estoque</th>
+                      {estoques.length > 1 ? estoques.map((e) => <th className="num" key={e.loja_id}>{e.eh_deposito ? "Galpao" : e.apelido || e.nome}</th>) : null}
+                      <th className="num">Total</th>
                       <th className="num">Reservado</th>
                       <th className="num">Disponivel</th>
                       <th className="num">Minimo</th>
                       <th className="num">Reposicao</th>
-                      <th className="num">Maximo</th>
                       <th className="num">Valor a custo</th>
                       <th>Localizacao</th>
                       <th>Situacao</th>
@@ -547,12 +566,21 @@ export default async function PaginaProduto({
                     {variacoes.map((v) => (
                       <tr key={v.variacao_id}>
                         <td><strong>{v.sku}</strong></td>
+                        {estoques.length > 1
+                          ? estoques.map((e) => {
+                              const q = saldosPorSku[v.variacao_id]?.[e.loja_id] ?? 0;
+                              return (
+                                <td className="num" key={e.loja_id} style={{ color: q > 0 ? "#166b46" : "#a09889", fontWeight: q > 0 ? 600 : 400 }}>
+                                  {q > 0 ? num(q) : "—"}
+                                </td>
+                              );
+                            })
+                          : null}
                         <td className="num">{num(v.estoque)}</td>
                         <td className="num">{num(v.reservado)}</td>
                         <td className="num"><strong>{num(v.disponivel)}</strong></td>
                         <td className="num">{num(v.estoque_min)}</td>
                         <td className="num">{num(v.ponto_reposicao)}</td>
-                        <td className="num">{num(v.estoque_max)}</td>
                         <td className="num">{moeda(v.estoque_custo)}</td>
                         <td style={{ fontSize: 12 }}>{[v.localizacao, v.corredor, v.prateleira, v.posicao].filter(Boolean).join(" ") || "—"}</td>
                         <td><SituacaoEstoque situacao={v.situacao_estoque} disponivel={v.disponivel} /></td>

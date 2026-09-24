@@ -1,6 +1,7 @@
 import { exigir } from "@/lib/auth";
 import { all, one, config } from "@/lib/db";
 import { caixaAberto, resumoCaixa } from "@/app/actions/pdv";
+import { listarEstoques, estoqueQueVende, estoqueDoCaixaAberto } from "@/lib/estoques";
 import PdvCaixa from "./PdvCaixa";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,17 @@ export default async function PaginaCaixa() {
 
   const cx = await caixaAberto();
   const resumo = cx ? await resumoCaixa(cx.id) : { dinheiro: 0, esperadoDinheiro: 0, totalGeral: 0, qtd: 0, sangrias: 0, suprimentos: 0, abertura: 0 };
+
+  // Estoque de onde este PDV vende: o do caixa aberto ou o estoque padrao.
+  const [estoques, estoqueVendaId] = await Promise.all([listarEstoques(), cx?.loja_id ?? estoqueDoCaixaAberto()]);
+  const vendaveis = estoques.filter((e) => e.eh_deposito === 0);
+  const estoqueAtual = estoques.find((e) => e.loja_id === estoqueVendaId) ?? (await estoqueQueVende());
+  const estoque = {
+    id: estoqueAtual?.loja_id ?? estoqueVendaId,
+    nome: estoqueAtual?.nome ?? "Estoque principal",
+    eh_deposito: estoqueAtual?.eh_deposito ?? 0,
+    opcoes: (vendaveis.length ? vendaveis : estoques).map((e) => ({ id: e.loja_id, nome: `${e.nome} — ${e.pecas} pecas` })),
+  };
 
   const [formas, vendedores] = await Promise.all([
     all<{ id: number; nome: string; tipo: string; aceita_troco: number }>(
@@ -37,6 +49,7 @@ export default async function PaginaCaixa() {
     <PdvCaixa
       usuario={{ id: usuario.id, nome: usuario.apelido || usuario.nome, papel: usuario.papel }}
       caixa={cx ? { id: cx.id, terminal: cx.terminal, abertura_em: cx.abertura_em, esperadoDinheiro: resumo.esperadoDinheiro } : null}
+      estoque={estoque}
       formas={formas}
       vendedores={vendedores}
       config={cfg}

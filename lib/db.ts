@@ -81,7 +81,7 @@ export async function tx<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function proximoNumero(nome: string, prefixo: string, largura = 6, tabela?: string): Promise<string> {
-  if (tabela && !["vendas", "compras", "devolucoes"].includes(tabela)) throw new Error("Tabela de numeracao invalida.");
+  if (tabela && !["vendas", "compras", "devolucoes", "transferencias"].includes(tabela)) throw new Error("Tabela de numeracao invalida.");
   return tx(async () => {
     await run("INSERT INTO sequencias(nome, ultimo) VALUES (?, 0) ON CONFLICT(nome) DO NOTHING", nome);
     if (tabela) {

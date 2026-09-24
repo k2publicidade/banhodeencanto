@@ -26,7 +26,8 @@ export const MENU: GrupoMenu[] = [
     titulo: "Catalogo",
     itens: [
       { href: "/produtos", rotulo: "Produtos e SKUs", icone: "❖", curto: "Produtos" },
-      { href: "/estoque", rotulo: "Estoque", icone: "▤" },
+      { href: "/estoque", rotulo: "Estoques", icone: "▤" },
+      { href: "/estoque/transferencia", rotulo: "Transferir estoque", icone: "⇄" },
       { href: "/compras", rotulo: "Compras", icone: "▽" },
       { href: "/fornecedores", rotulo: "Fornecedores", icone: "◇" },
     ],
@@ -60,8 +61,10 @@ const TITULOS_EXTRA: { prefixo: string; rotulo: string }[] = [
   { prefixo: "/clientes/", rotulo: "Ficha do cliente" },
   { prefixo: "/vendas/", rotulo: "Detalhe da venda" },
   { prefixo: "/compras/nova", rotulo: "Nova compra" },
+  { prefixo: "/estoque/movimentos", rotulo: "Movimentacoes de estoque" },
+  { prefixo: "/estoque/transferencia", rotulo: "Transferir entre estoques" },
   { prefixo: "/configuracoes/usuarios", rotulo: "Usuarios" },
-  { prefixo: "/configuracoes/lojas", rotulo: "Lojas" },
+  { prefixo: "/configuracoes/lojas", rotulo: "Estoques e locais" },
   { prefixo: "/cadastros/", rotulo: "Cadastros auxiliares" },
 ];
 

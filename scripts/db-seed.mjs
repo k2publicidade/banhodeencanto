@@ -7,6 +7,7 @@ import { readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { randomBytes, scryptSync } from "node:crypto";
+import { dividirEstoque, sincronizarSequenciaTransferencia } from "./_dividir-estoque.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -591,6 +592,25 @@ for (let k = 0; k < 8; k++) {
     pick(["Mecha danificada na aplicacao", "Pacote aberto", "Avaria no transporte", "Material vencido"]), U_MARIA, dataHoraAtras(rint(1, 60), 15, 0));
 }
 
+/* ---------------- 9b. ESTOQUES SEPARADOS (galpao x loja) ----------------
+   O sistema controla estoque POR LOCAL: a loja vende, o galpao (deposito
+   central) guarda o volume. Aqui o galpao e abastecido com uma transferencia
+   de verdade (documento TRF-xxxxx + movimentos nos dois estoques), do mesmo
+   jeito que o cliente vai fazer na tela de transferencia. */
+const DEPOSITO = db.prepare("select id from lojas where eh_deposito = 1 order by id limit 1").get()?.id;
+const transferenciaAbertura = DEPOSITO
+  ? dividirEstoque(db, {
+      origemId: LOJA,
+      destinoId: DEPOSITO,
+      percentualMovido: 0.6,
+      loteMax: 15,
+      usuarioId: U_ADMIN,
+      usuarioNome: "Administrador",
+      observacao: "Transferencia de abertura do galpao",
+    })
+  : null;
+sincronizarSequenciaTransferencia(db);
+
 /* ---------------- 11. SEQUENCIAIS ----------------
    As numeracoes acima foram gravadas direto no banco: aqui a tabela
    `sequencias` e alinhada com o maior numero existente, senao a proxima
@@ -608,6 +628,9 @@ db.prepare(`INSERT INTO auditoria(usuario_id,usuario_nome,acao,entidade,detalhe,
 const totalSkus = db.prepare("select count(*) n from variacoes").get().n;
 const totalEstoque = db.prepare("select COALESCE(SUM(quantidade),0) s from estoque").get().s;
 const totalVendas = db.prepare("select count(*) n from vendas").get().n;
+const porLocal = db.prepare(`select l.nome, l.eh_deposito, COALESCE(SUM(e.quantidade),0) pecas
+  from lojas l left join estoque e on e.loja_id = l.id group by l.id order by l.eh_deposito`).all();
+const resumoEstoques = porLocal.map((l) => `  ${l.eh_deposito ? "Galpao" : "Loja  "} ${l.nome} ....: ${l.pecas} pecas`).join("\n");
 console.log(`
 ============================================================
  BANCO CRIADO COM SUCESSO
@@ -615,6 +638,8 @@ console.log(`
  Produtos (pai) ....: ${catalogo.length}
  Variacoes / SKUs ...: ${totalSkus}
  Pecas em estoque ...: ${totalEstoque}
+${resumoEstoques}
+ Transferencias .....: ${transferenciaAbertura ? transferenciaAbertura.documentos + " documento(s), " + transferenciaAbertura.pecas + " pecas movidas" : "nenhuma"}
  Vendas registradas .: ${totalVendas}
  Clientes ...........: ${clientes.length}
  Fornecedores .......: ${forns.length}

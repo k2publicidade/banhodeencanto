@@ -242,6 +242,22 @@ export async function salvarLoja(form: FormData) {
   const id = inteiro(form.get("__id"));
   const nome = texto(form.get("nome"));
   if (!nome) return { ok: false, erro: "Informe o nome da loja." };
+  const ehDeposito = String(form.get("tipo") || "") === "deposito" ? 1 : flag(form.get("eh_deposito"));
+  const querPadrao = flag(form.get("padrao"));
+  const ativaEnviada = form.getAll("ativa").map((v) => String(v));
+  const querAtiva = ativaEnviada.length === 0 ? 1 : ativaEnviada.includes("1") ? 1 : 0;
+
+  // Regras que mantem o sistema coerente: deposito guarda, loja vende.
+  if (querPadrao && ehDeposito) {
+    return { ok: false, erro: "Galpao/deposito nao vende no balcao: so um estoque do tipo loja pode ser o de venda (padrao)." };
+  }
+  if (!querAtiva) {
+    const atual = id ? await one<any>("SELECT id, padrao, eh_deposito FROM lojas WHERE id = ?", id) : null;
+    const ativos = await one<{ n: number }>("SELECT COUNT(*) n FROM lojas WHERE ativa = 1 AND id <> ?", id || 0);
+    if (atual?.padrao === 1) return { ok: false, erro: "Este e o estoque que vende no PDV. Defina outro como padrao antes de desativar." };
+    if (Number(ativos?.n ?? 0) === 0) return { ok: false, erro: "O sistema precisa de ao menos um estoque ativo." };
+  }
+
   const vals = {
     nome,
     apelido: texto(form.get("apelido")),
@@ -254,21 +270,28 @@ export async function salvarLoja(form: FormData) {
     cep: texto(form.get("cep")),
     telefone: texto(form.get("telefone")),
     email: texto(form.get("email")),
-    eh_deposito: flag(form.get("eh_deposito")),
-    ativa: form.get("ativa") === null ? 1 : 1,
+    eh_deposito: ehDeposito,
+    ativa: querAtiva,
   };
   try {
+    let lojaId = id;
     if (id) {
       const sets = Object.keys(vals).map((k) => `${k} = ?`).join(", ");
       await run(`UPDATE lojas SET ${sets} WHERE id = ?`, ...Object.values(vals), id);
     } else {
-      await run(`INSERT INTO lojas(${Object.keys(vals).join(",")}) VALUES (${Object.keys(vals).map(() => "?").join(",")})`, ...Object.values(vals));
+      const r = await run(`INSERT INTO lojas(${Object.keys(vals).join(",")}) VALUES (${Object.keys(vals).map(() => "?").join(",")}) RETURNING id`, ...Object.values(vals));
+      lojaId = Number(r.lastInsertRowid);
     }
-    await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: id ? "alterar" : "criar", entidade: "lojas", entidade_id: id || null, detalhe: nome });
+    // Só um estoque fica como "padrão" (o que abastece o PDV)
+    if (querPadrao && lojaId) {
+      await run("UPDATE lojas SET padrao = CASE WHEN id = ? THEN 1 ELSE 0 END", lojaId);
+    }
+    await auditar({ usuario_id: u.id, usuario_nome: u.nome, acao: id ? "alterar" : "criar", entidade: "lojas", entidade_id: lojaId || null, detalhe: nome });
   } catch (e: any) {
     return { ok: false, erro: e?.message || "Falha ao salvar a loja." };
   }
   revalidatePath("/configuracoes/lojas");
+  revalidatePath("/estoque");
   return { ok: true };
 }
 

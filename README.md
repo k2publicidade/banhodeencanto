@@ -56,7 +56,14 @@ npm run db:migrar -- --confirmar
 ## Verificacao (rodar antes de publicar mudancas)
 
 ```bash
+npm run test:tudo        # postgres + migracao + build + estoques + rotas HTTP
+```
+
+Ou passo a passo:
+
+```bash
 npm run test:postgres    # schema + integracao PostgreSQL + fluxos principais do PDV
+npm run test:estoques    # estoques separados: transferencia, cancelamento, venda por local
 npm run build            # verificacao de tipos e build de producao
 ```
 
@@ -82,11 +89,13 @@ resposta flight) e das convencoes de interface estao em
 - **Vendas**: detalhe da venda, devolucao parcial ou total (volta ao estoque ou
   vira perda) e cancelamento com estorno de estoque, caixa e fiado.
 - **Cadastros**: produtos com variacoes, precos e margens, fornecedores, clientes,
-  usuarios, lojas e tabelas auxiliares (marcas, cores, categorias...).
-- **Estoque**: posicao por variacao, entradas, transferencias entre lojas, perdas,
-  sugestao de compra e curva ABC.
+  usuarios, locais de estoque e tabelas auxiliares (marcas, cores, categorias...).
+- **Estoques separados**: varios locais (galpao/centro de distribuicao + loja),
+  cada um com saldo proprio por SKU, transferencia com documento numerado e
+  estorno, reposicao sugerida do galpao para a loja e movimentacao manual
+  (entrada, saida, perda, inventario). Detalhes em [docs/ESTOQUES.md](docs/ESTOQUES.md).
 - **Relatorios**: vendas por periodo, curva ABC, margem, fiado em aberto e
-  exportacao em CSV.
+  exportacao em CSV (o CSV de estoque traz uma coluna de saldo por local).
 - **Rastreabilidade**: toda operacao relevante e gravada em `auditoria`.
 
 ## Estrutura

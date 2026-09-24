@@ -1,55 +1,86 @@
 import Link from "next/link";
-import { exigirGestao } from "@/lib/auth";
+import { exigirGestao, podeGerenciar } from "@/lib/auth";
 import { all } from "@/lib/db";
 import { moeda, num } from "@/lib/format";
-import { Cabecalho, Conteudo, Secao, Tabela, Campo, Linha, Vazio } from "@/components/ui";
+import { listarEstoques, rotuloEstoque } from "@/lib/estoques";
+import { Cabecalho, Conteudo, Secao, Tabela, Campo, CampoSelect, Linha, Vazio, Kpi, Grade } from "@/components/ui";
 import { postSalvarLoja } from "@/app/actions/cadastros";
-import { acaoTransferir } from "@/app/actions/estoque";
+import { acaoDefinirEstoquePadrao, alternarEstoqueAtivo } from "@/app/actions/estoque";
 
 export const dynamic = "force-dynamic";
 
-export default async function PaginaLojas({
+export default async function PaginaEstoques({
   searchParams,
 }: {
   searchParams: Promise<{ editar?: string; msg?: string; erro?: string }>;
 }) {
-  await exigirGestao();
+  const u = await exigirGestao();
+  const gestor = podeGerenciar(u);
   const sp = await searchParams;
 
-  const lojas = await all<any>(
-    `SELECT l.*,
-            (SELECT COUNT(DISTINCT variacao_id) FROM estoque e WHERE e.loja_id = l.id AND e.quantidade > 0) skus,
-            (SELECT COALESCE(SUM(e.quantidade),0) FROM estoque e WHERE e.loja_id = l.id) pecas,
-            (SELECT COALESCE(SUM(e.quantidade * v.custo_medio),0) FROM estoque e JOIN variacoes v ON v.id = e.variacao_id WHERE e.loja_id = l.id) valor,
-            (SELECT COUNT(*) FROM vendas v WHERE v.loja_id = l.id) vendas
-     FROM lojas l ORDER BY l.padrao DESC, l.nome`
-  );
-
-  const editando = sp.editar ? lojas.find((l) => l.id === Number(sp.editar)) : null;
+  const [estoques, vendasPorLoja] = await Promise.all([
+    listarEstoques(true),
+    all<any>("SELECT loja_id, COUNT(*) vendas FROM vendas GROUP BY loja_id"),
+  ]);
+  const vendas = new Map(vendasPorLoja.map((v) => [Number(v.loja_id), Number(v.vendas)]));
+  const editando = sp.editar ? estoques.find((l) => l.loja_id === Number(sp.editar)) : null;
+  const ativos = estoques.filter((e) => e.ativa === 1);
+  const totalPecas = ativos.reduce((s, e) => s + Number(e.pecas), 0);
+  const totalValor = ativos.reduce((s, e) => s + Number(e.valor_custo), 0);
 
   return (
     <>
       <Cabecalho
-        titulo="Unidades, lojas e depositos"
-        subtitulo="O estoque e controlado por SKU x unidade: replicar o modelo nao exige reconstruir o sistema"
-        acoes={<Link className="btn btn-neutro" href="/configuracoes">Configuracoes</Link>}
+        titulo="Estoques e locais"
+        subtitulo="Cada estoque tem saldo proprio por SKU. O galpao e o centro de distribuicao (guarda) e a loja vende no balcao."
+        acoes={
+          <>
+            <Link className="btn btn-neutro" href="/estoque">Ver estoques</Link>
+            <Link className="btn btn-primario" href="/estoque/transferencia">Transferir entre estoques</Link>
+          </>
+        }
       />
 
       <Conteudo largura={1150}>
         {sp.msg ? <div className="aviso aviso-ok">{sp.msg}</div> : null}
         {sp.erro ? <div className="aviso aviso-erro">{sp.erro}</div> : null}
 
+        <Grade colunas={4}>
+          <Kpi rotulo="Estoques ativos" valor={String(ativos.length)} detalhe={`${ativos.filter((e) => e.eh_deposito === 0).length} loja(s) • ${ativos.filter((e) => e.eh_deposito === 1).length} galpao(s)`} variante="teal" />
+          <Kpi rotulo="Pecas em estoque" valor={num(totalPecas)} detalhe="Somando todos os locais" />
+          <Kpi rotulo="Valor a custo" valor={moeda(totalValor)} detalhe="Capital parado no estoque" />
+          <Kpi
+            rotulo="Estoque que vende"
+            valor={ativos.find((e) => e.padrao === 1)?.nome ?? "—"}
+            detalhe="E o estoque usado pelo PDV"
+            variante="ouro"
+          />
+        </Grade>
+
         <Secao
-          titulo={editando ? `Editar ${editando.nome}` : "Nova unidade"}
-          descricao="Cadastre a loja matriz, filiais e depositos. Cada unidade tem seu proprio saldo por SKU."
+          titulo={editando ? `Editar ${editando.nome}` : "Novo estoque / local"}
+          descricao="Galpao (centro de distribuicao) nao vende no balcao, so guarda e abastece. Loja vende e pode ser o estoque padrao do PDV."
         >
           <form action={postSalvarLoja}>
-            <input type="hidden" name="__id" value={editando?.id ?? ""} />
-            <Linha colunas="2fr 1fr 2fr 1fr">
-              <Campo rotulo="Nome da unidade" nome="nome" valor={editando?.nome} obrigatorio placeholder="Banho de Encanto - Matriz" />
+            <input type="hidden" name="__id" value={editando?.loja_id ?? ""} />
+            <Linha colunas="2fr 1.4fr 1fr">
+              <Campo rotulo="Nome do estoque / local" nome="nome" valor={editando?.nome} obrigatorio placeholder="Banho de Encanto - Loja Centro" />
+              <CampoSelect
+                rotulo="Tipo"
+                nome="tipo"
+                valor={editando ? (editando.eh_deposito ? "deposito" : "loja") : "loja"}
+                opcoes={[
+                  { valor: "loja", texto: "Loja que vende (balcao / PDV)" },
+                  { valor: "deposito", texto: "Galpao / centro de distribuicao (so armazena)" },
+                ]}
+                ajuda="Depois de salvar, o tipo fica gravado conforme a opcao escolhida."
+              />
               <Campo rotulo="Apelido (cupom)" nome="apelido" valor={editando?.apelido} placeholder="BANHO DE ENCANTO" />
+            </Linha>
+            <Linha colunas="2fr 1fr 1fr">
               <Campo rotulo="Razao social" nome="razao_social" valor={editando?.razao_social} />
               <Campo rotulo="CNPJ" nome="cnpj" valor={editando?.cnpj} />
+              <Campo rotulo="Inscricao estadual" nome="inscricao_est" valor={editando?.inscricao_est} />
             </Linha>
             <Linha colunas="2fr 1fr 1fr 1fr">
               <Campo rotulo="Endereco" nome="endereco" valor={editando?.endereco} />
@@ -57,53 +88,90 @@ export default async function PaginaLojas({
               <Campo rotulo="UF" nome="uf" valor={editando?.uf} />
               <Campo rotulo="CEP" nome="cep" valor={editando?.cep} />
             </Linha>
-            <Linha colunas="1fr 1fr 1fr">
+            <Linha colunas="1fr 1fr">
               <Campo rotulo="Telefone" nome="telefone" valor={editando?.telefone} />
               <Campo rotulo="E-mail" nome="email" valor={editando?.email} />
-              <Campo rotulo="Inscricao estadual" nome="inscricao_est" valor={editando?.inscricao_est} />
             </Linha>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <input type="checkbox" name="eh_deposito" value="1" defaultChecked={!!editando?.eh_deposito} style={{ width: "auto" }} />
-              <span style={{ fontSize: 13.5 }}>Esta unidade e um deposito (nao vende no balcao)</span>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "4px 0 14px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, textTransform: "none", letterSpacing: 0 }}>
+                <input type="checkbox" name="padrao" value="1" defaultChecked={!!editando?.padrao} style={{ width: "auto" }} />
+                <span>Usar este estoque como o estoque de venda (o PDV baixa daqui)</span>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, textTransform: "none", letterSpacing: 0 }}>
+                <input type="hidden" name="ativa" value="0" />
+                <input type="checkbox" name="ativa" value="1" defaultChecked={!editando || !!editando.ativa} style={{ width: "auto" }} />
+                <span>Estoque ativo (aparece nas telas e pode receber transferencia)</span>
+              </label>
             </div>
-            <button className="btn btn-primario" type="submit">{editando ? "Salvar alteracoes" : "Cadastrar unidade"}</button>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button className="btn btn-primario" type="submit">{editando ? "Salvar alteracoes" : "Criar estoque"}</button>
+              {editando ? <Link className="btn btn-neutro" href="/configuracoes/lojas">Cancelar edicao</Link> : null}
+            </div>
           </form>
         </Secao>
 
-        <Secao titulo={`${lojas.length} unidade(s)`} padding={false}>
-          {lojas.length === 0 ? (
-            <Vazio titulo="Nenhuma unidade cadastrada" />
+        <Secao titulo={`${estoques.length} estoque(s) cadastrado(s)`} padding={false}>
+          {estoques.length === 0 ? (
+            <Vazio titulo="Nenhum estoque cadastrado" descricao="Crie a loja e o galpao para comecar." />
           ) : (
-            <Tabela>
+            <Tabela principal={0}>
               <thead>
                 <tr>
-                  <th>Unidade</th>
-                  <th>CNPJ</th>
+                  <th>Estoque</th>
+                  <th>Tipo</th>
                   <th>Cidade</th>
                   <th className="num">SKUs com saldo</th>
                   <th className="num">Pecas</th>
                   <th className="num">Valor a custo</th>
+                  <th className="num">Transferencias</th>
                   <th className="num">Vendas</th>
-                  <th>Tipo</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {lojas.map((l) => (
-                  <tr key={l.id}>
+                {estoques.map((l) => (
+                  <tr key={l.loja_id} style={l.ativa ? undefined : { opacity: 0.6 }}>
                     <td>
                       <strong>{l.nome}</strong>
-                      {l.padrao ? <span className="tag tag-amarelo" style={{ marginLeft: 6, fontSize: 10 }}>PADRAO</span> : null}
-                      <div style={{ fontSize: 11.5, color: "#7d7466" }}>{l.apelido ?? ""}</div>
+                      {l.padrao ? <span className="tag tag-amarelo" style={{ marginLeft: 6, fontSize: 10 }}>VENDE NO PDV</span> : null}
+                      {l.ativa ? null : <span className="tag tag-cinza" style={{ marginLeft: 6, fontSize: 10 }}>INATIVO</span>}
+                      <div style={{ fontSize: 11.5, color: "#7d7466" }}>{l.apelido ?? ""} {l.cnpj ?? ""}</div>
                     </td>
-                    <td style={{ fontSize: 12.5 }}>{l.cnpj ?? "—"}</td>
+                    <td>
+                      <span className={"tag " + (l.eh_deposito ? "tag-azul" : "tag-verde")}>{l.eh_deposito ? "galpao" : "loja"}</span>
+                    </td>
                     <td style={{ fontSize: 12.5 }}>{l.cidade ? `${l.cidade} ${l.uf ?? ""}` : "—"}</td>
-                    <td className="num">{l.skus}</td>
+                    <td className="num">{num(l.skus)}</td>
                     <td className="num">{num(l.pecas)}</td>
-                    <td className="num">{moeda(l.valor)}</td>
-                    <td className="num">{l.vendas}</td>
-                    <td><span className={"tag " + (l.eh_deposito ? "tag-azul" : "tag-verde")}>{l.eh_deposito ? "deposito" : "loja"}</span></td>
-                    <td><Link className="btn btn-sm btn-neutro" href={`/configuracoes/lojas?editar=${l.id}`}>Editar</Link></td>
+                    <td className="num">{moeda(l.valor_custo)}</td>
+                    <td className="num">{num(l.transferencias)}</td>
+                    <td className="num">{num(vendas.get(l.loja_id) ?? 0)}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <Link className="btn btn-sm btn-neutro" href={`/estoque?estoque=${l.loja_id}`}>Estoque</Link>
+                        <Link className="btn btn-sm btn-neutro" href={`/configuracoes/lojas?editar=${l.loja_id}`}>Editar</Link>
+                        {l.padrao ? null : (
+                          <form action={acaoDefinirEstoquePadrao}>
+                            <input type="hidden" name="loja_id" value={l.loja_id} />
+                            <button
+                              className="btn btn-sm btn-neutro"
+                              type="submit"
+                              disabled={l.eh_deposito === 1}
+                              title={l.eh_deposito === 1 ? "Galpao/deposito nao vende no balcao" : "Marcar como o estoque que abastece o PDV"}
+                            >
+                              Vende no PDV
+                            </button>
+                          </form>
+                        )}
+                        <form action={alternarEstoqueAtivo}>
+                          <input type="hidden" name="loja_id" value={l.loja_id} />
+                          <input type="hidden" name="ativo" value={l.ativa ? "0" : "1"} />
+                          <button className="btn btn-sm btn-neutro" type="submit">{l.ativa ? "Desativar" : "Ativar"}</button>
+                        </form>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -111,55 +179,31 @@ export default async function PaginaLojas({
           )}
         </Secao>
 
-        <Secao titulo="Transferencia entre unidades" descricao="Mova estoque de uma unidade para outra mantendo o historico">
-          <TransferenciaForm
-            variacoes={(await all<any>(
-              `SELECT variacao_id, sku, produto, cor_codigo, comprimento, comprimento_unidade
-               FROM vw_estoque_posicao WHERE variacao_status='ativo' ORDER BY produto, cor_codigo LIMIT 400`
-            )).map((v) => ({
-              id: v.variacao_id,
-              texto: `${v.produto} | ${v.cor_codigo ?? "-"} ${v.comprimento ? v.comprimento + (v.comprimento_unidade ?? "") : ""} | ${v.sku}`,
-            }))}
-            lojas={lojas.map((l) => ({ id: l.id, texto: l.nome }))}
-          />
+        <Secao titulo="Como o estoque esta organizado" descricao="Regra simples e sem complicacao: o galpao guarda, a loja vende.">
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.75, color: "#4c463d" }}>
+            <li><strong>Saldo separado:</strong> o mesmo SKU pode ter 200 pecas no galpao e 12 na loja. Nada se mistura.</li>
+            <li><strong>Visualizacao:</strong> a tela <Link href="/estoque">Estoques</Link> mostra cada local em um cartao e permite filtrar por estoque ou ver o consolidado.</li>
+            <li><strong>Conversam entre si:</strong> a <Link href="/estoque/transferencia">transferencia</Link> move saldo do galpao para a loja (ou de volta) com documento numerado, autor e data.</li>
+            <li><strong>Reposicao em um clique:</strong> a tela de transferencia lista o que esta faltando na loja e sobrando no galpao.</li>
+            <li><strong>Venda:</strong> o PDV baixa do estoque do caixa aberto. O estoque marcado como "vende no PDV" e o padrao quando nenhum caixa esta aberto.</li>
+            <li><strong>Compras:</strong> ao confirmar uma compra, escolha em qual estoque a mercadoria entrou.</li>
+          </ul>
+        </Secao>
+
+        <Secao titulo="Resumo por local" descricao="Mesma informacao da tela de estoque, aqui para gestao rapida">
+          <Grade colunas={Math.min(estoques.length, 4)}>
+            {estoques.map((l) => (
+              <Kpi
+                key={l.loja_id}
+                rotulo={rotuloEstoque(l)}
+                valor={num(l.pecas) + " pecas"}
+                detalhe={`${moeda(l.valor_custo)} a custo • ${moeda(l.valor_venda)} a venda`}
+                href={`/estoque?estoque=${l.loja_id}`}
+              />
+            ))}
+          </Grade>
         </Secao>
       </Conteudo>
     </>
-  );
-}
-
-function TransferenciaForm({ variacoes, lojas }: { variacoes: { id: number; texto: string }[]; lojas: { id: number; texto: string }[] }) {
-  return (
-    <form action={acaoTransferir} className="grade-form" style={{ "--cols-desktop": "2.5fr 1fr 1fr 1fr auto" } as React.CSSProperties}>
-      <div>
-        <label htmlFor="variacao_id">SKU</label>
-        <select id="variacao_id" name="variacao_id" required defaultValue="">
-          <option value="">— selecione —</option>
-          {variacoes.map((v) => (
-            <option key={v.id} value={v.id}>{v.texto}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label htmlFor="loja_origem">Origem</label>
-        <select id="loja_origem" name="loja_origem" required defaultValue="">
-          <option value="">—</option>
-          {lojas.map((l) => (
-            <option key={l.id} value={l.id}>{l.texto}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label htmlFor="loja_destino">Destino</label>
-        <select id="loja_destino" name="loja_destino" required defaultValue="">
-          <option value="">—</option>
-          {lojas.map((l) => (
-            <option key={l.id} value={l.id}>{l.texto}</option>
-          ))}
-        </select>
-      </div>
-      <Campo rotulo="Quantidade" nome="quantidade" placeholder="10" />
-      <button className="btn btn-primario" type="submit">Transferir</button>
-    </form>
   );
 }

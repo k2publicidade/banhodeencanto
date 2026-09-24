@@ -54,7 +54,12 @@ try {
   let acessoInicial = null;
   for (const table of tables) {
     const sourceExists = source.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name=?").get(table).n;
-    if (!sourceExists) throw new Error(`Tabela ausente na origem: ${table}`);
+    // O banco de origem pode ser mais antigo que o schema atual (uma tabela nova,
+    // como `transferencias`, nao existe nele). Nesse caso nao ha o que copiar.
+    if (!sourceExists) {
+      console.log(`${table}: tabela ausente na origem (nada a copiar)`);
+      continue;
+    }
     const columns = source.prepare(`PRAGMA table_xinfo(${identifier(table)})`).all()
       .filter((column) => column.hidden === 0).map((column) => column.name);
     const rows = source.prepare(`SELECT ${columns.map(identifier).join(",")} FROM ${identifier(table)}`).all();

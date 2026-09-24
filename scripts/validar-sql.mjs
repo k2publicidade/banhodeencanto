@@ -18,6 +18,17 @@ const DB = join(RAIZ, "data", "banho.db");
 const db = new DatabaseSync(DB);
 db.exec("PRAGMA foreign_keys = ON;");
 
+// Aplica o schema (CREATE TABLE IF NOT EXISTS + views) antes de validar: garante
+// que o banco local de desenvolvimento tenha as tabelas/views mais novas, sem
+// apagar dado nenhum.
+try {
+  db.exec(readFileSync(join(RAIZ, "lib", "schema.sql"), "utf8"));
+  console.log("Schema aplicado no banco local (sem apagar dados).");
+} catch (e) {
+  console.error("FALHA ao aplicar lib/schema.sql:", String(e.message || e));
+  process.exit(1);
+}
+
 const ALVOS = ["app", "lib", "components", "scripts"];
 
 function arquivos(dir) {
