@@ -62,11 +62,20 @@ O schema `banho_encanto` nao e publicado pela Data API padrao do Supabase.
 
 ## Deploy e verificacao
 
+**Antes de publicar codigo que usa tabelas/views novas** (como as de estoque
+separado: `transferencias`, `vw_estoques`, `vw_estoque_loja`), aplique o schema em
+producao - senao as telas quebram com `relation does not exist`:
+
+```powershell
+.\scripts\aplicar-estoques-supabase.ps1          # aplica o schema (idempotente)
+```
+
+Veja [ESTOQUES.md](ESTOQUES.md) para separar o estoque entre loja e galpao.
+
 Na pasta `sistema`:
 
 ```bash
-npm run test:postgres
-npm run build
+npm run test:tudo
 npx vercel link --yes --project banhodeencanto
 npx vercel --prod
 ```
